@@ -168,7 +168,7 @@ void chiaki_controller_state_set_touch_pos(
     ChiakiControllerState *, uint8_t id, uint16_t x, uint16_t y);
 ```
 
-El bridge actual usa `chiaki_lib_init`, `chiaki_session_init`, `chiaki_session_start`, `chiaki_session_set_controller_state`, `chiaki_session_stop`, `chiaki_session_join` y `chiaki_session_fini`. Recibe host, `regist_key` y `morning` ya obtenidos por Chiaki; no implementa discovery ni registro. `set_idle()` y escritura directa de campos públicos son suficientes para el estado actual; la API de touch solo debe usarse cuando Mouseplay incorpore coordenadas y gestos de touchpad.
+El bridge actual usa `chiaki_lib_init`, `chiaki_discovery_init`/`chiaki_discovery_thread_start_oneshot`, `chiaki_regist_start`/`chiaki_regist_fini`, `chiaki_session_init`, `chiaki_session_start`, `chiaki_session_set_controller_state`, `chiaki_session_stop`, `chiaki_session_join` y `chiaki_session_fini`. Discovery y registro son wrappers mínimos de esas APIs: no duplican el protocolo y devuelven `host_addr`, `rp_regist_key` y `rp_key`. `set_idle()` y escritura directa de campos públicos son suficientes para el estado actual; la API de touch solo debe usarse cuando Mouseplay incorpore coordenadas y gestos de touchpad.
 
 ## 5. ControllerState → Chiaki mapping
 

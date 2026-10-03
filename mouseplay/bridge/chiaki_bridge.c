@@ -11,10 +11,59 @@ typedef SSIZE_T ssize_t;
 
 #if defined(MOUSEPLAY_CHIAKI_LINKED)
 #include <chiaki/common.h>
+#include <chiaki/discovery.h>
 #include <chiaki/log.h>
+#include <chiaki/regist.h>
 #include <chiaki/session.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 #include <string.h>
 #include <stdlib.h>
+#endif
+
+#define MOUSEPLAY_CHIAKI_HOST_CAPACITY 256
+
+#if defined(MOUSEPLAY_CHIAKI_LINKED)
+struct MouseplayDiscoveryCallback {
+    MouseplayChiakiDiscoveryResult *result;
+};
+
+static void mouseplay_chiaki_discovery_callback(ChiakiDiscoveryHost *host, void *user)
+{
+    struct MouseplayDiscoveryCallback *callback = user;
+    if (!host || !callback || !callback->result || !host->host_addr)
+        return;
+    strncpy(callback->result->host, host->host_addr, MOUSEPLAY_CHIAKI_HOST_CAPACITY - 1);
+    callback->result->host[MOUSEPLAY_CHIAKI_HOST_CAPACITY - 1] = '\0';
+    callback->result->ps5 = chiaki_discovery_host_is_ps5(host);
+    callback->result->target = chiaki_discovery_host_system_version_target(host);
+    callback->result->state = host->state;
+}
+
+struct MouseplayRegistrationCallback {
+    MouseplayChiakiRegistrationResult *result;
+    bool finished;
+    bool success;
+};
+
+static void mouseplay_chiaki_registration_callback(ChiakiRegistEvent *event, void *user)
+{
+    struct MouseplayRegistrationCallback *callback = user;
+    if (!event || !callback)
+        return;
+    callback->finished = true;
+    callback->success = event->type == CHIAKI_REGIST_EVENT_TYPE_FINISHED_SUCCESS
+        && event->registered_host;
+    if (callback->success) {
+        callback->result->target = event->registered_host->target;
+        memcpy(callback->result->regist_key,
+               event->registered_host->rp_regist_key,
+               sizeof(callback->result->regist_key));
+        memcpy(callback->result->morning,
+               event->registered_host->rp_key,
+               sizeof(callback->result->morning));
+    }
+}
 #endif
 
 struct MouseplayChiakiContext {
@@ -40,6 +89,147 @@ MouseplayChiakiContext *mouseplay_chiaki_context_new(void)
     return context;
 #else
     return NULL;
+#endif
+}
+
+int mouseplay_chiaki_discover(
+    MouseplayChiakiContext *context,
+    const char *address,
+    bool ps5,
+    uint64_t timeout_ms,
+    MouseplayChiakiDiscoveryResult *result)
+{
+#if defined(MOUSEPLAY_CHIAKI_LINKED)
+    if (!context || !address || !result || timeout_ms == 0)
+        return MOUSEPLAY_CHIAKI_INVALID_STATE;
+    memset(result, 0, sizeof(*result));
+
+    struct addrinfo hints = {0};
+    hints.ai_socktype = SOCK_DGRAM;
+    hints.ai_family = strchr(address, ':') ? AF_INET6 : AF_INET;
+    struct addrinfo *addresses = NULL;
+    if (getaddrinfo(address, NULL, &hints, &addresses) != 0)
+        return CHIAKI_ERR_PARSE_ADDR;
+
+    struct addrinfo *selected = NULL;
+    for (struct addrinfo *candidate = addresses; candidate; candidate = candidate->ai_next) {
+        if ((candidate->ai_family == AF_INET || candidate->ai_family == AF_INET6)
+            && candidate->ai_socktype == SOCK_DGRAM) {
+            selected = candidate;
+            break;
+        }
+    }
+    if (!selected) {
+        freeaddrinfo(addresses);
+        return CHIAKI_ERR_PARSE_ADDR;
+    }
+
+    struct sockaddr_storage destination = {0};
+    memcpy(&destination, selected->ai_addr, selected->ai_addrlen);
+    if (destination.ss_family == AF_INET)
+        ((struct sockaddr_in *)&destination)->sin_port = htons(
+            ps5 ? CHIAKI_DISCOVERY_PORT_PS5 : CHIAKI_DISCOVERY_PORT_PS4);
+    else
+        ((struct sockaddr_in6 *)&destination)->sin6_port = htons(
+            ps5 ? CHIAKI_DISCOVERY_PORT_PS5 : CHIAKI_DISCOVERY_PORT_PS4);
+    socklen_t destination_size = selected->ai_addrlen;
+    freeaddrinfo(addresses);
+
+    ChiakiDiscovery discovery;
+    ChiakiErrorCode error = chiaki_discovery_init(&discovery, &context->log, destination.ss_family);
+    if (error != CHIAKI_ERR_SUCCESS)
+        return error;
+
+    ChiakiDiscoveryThread thread;
+    struct MouseplayDiscoveryCallback callback = { .result = result };
+    error = chiaki_discovery_thread_start_oneshot(
+        &thread, &discovery, mouseplay_chiaki_discovery_callback, &callback);
+    if (error == CHIAKI_ERR_SUCCESS) {
+        ChiakiDiscoveryPacket packet = {
+            .cmd = CHIAKI_DISCOVERY_CMD_SRCH,
+            .protocol_version = ps5
+                ? CHIAKI_DISCOVERY_PROTOCOL_VERSION_PS5
+                : CHIAKI_DISCOVERY_PROTOCOL_VERSION_PS4,
+            .user_credential = 0,
+        };
+        error = chiaki_discovery_send(
+            &discovery, &packet, (struct sockaddr *)&destination, destination_size);
+        if (error == CHIAKI_ERR_SUCCESS)
+            error = chiaki_thread_timedjoin(&thread.thread, NULL, timeout_ms);
+        else
+            chiaki_discovery_thread_stop(&thread);
+        if (error == CHIAKI_ERR_TIMEOUT) {
+            chiaki_discovery_thread_stop(&thread);
+        } else if (error == CHIAKI_ERR_SUCCESS) {
+            chiaki_stop_pipe_fini(&thread.stop_pipe);
+        } else {
+            chiaki_discovery_thread_stop(&thread);
+        }
+    }
+    chiaki_discovery_fini(&discovery);
+    if (error != CHIAKI_ERR_SUCCESS)
+        return error;
+    return result->host[0] ? MOUSEPLAY_CHIAKI_SUCCESS : MOUSEPLAY_CHIAKI_REGISTRATION_FAILED;
+#else
+    (void)context;
+    (void)address;
+    (void)ps5;
+    (void)timeout_ms;
+    (void)result;
+    return MOUSEPLAY_CHIAKI_UNAVAILABLE;
+#endif
+}
+
+int mouseplay_chiaki_register(
+    MouseplayChiakiContext *context,
+    const char *host,
+    int target,
+    uint32_t pin,
+    uint32_t console_pin,
+    const uint8_t *psn_account_id,
+    const char *psn_online_id,
+    MouseplayChiakiRegistrationResult *result)
+{
+#if defined(MOUSEPLAY_CHIAKI_LINKED)
+    if (!context || !host || !result || (!psn_account_id && !psn_online_id))
+        return MOUSEPLAY_CHIAKI_INVALID_STATE;
+    memset(result, 0, sizeof(*result));
+
+    ChiakiRegistInfo info = {0};
+    info.target = (ChiakiTarget)target;
+    info.host = host;
+    info.broadcast = false;
+    info.psn_online_id = psn_online_id;
+    if (psn_account_id)
+        memcpy(info.psn_account_id, psn_account_id, CHIAKI_PSN_ACCOUNT_ID_SIZE);
+    info.pin = pin;
+    info.console_pin = console_pin;
+
+    struct MouseplayRegistrationCallback callback = {
+        .result = result,
+        .finished = false,
+        .success = false,
+    };
+    ChiakiRegist registration;
+    ChiakiErrorCode error = chiaki_regist_start(
+        &registration, &context->log, &info,
+        mouseplay_chiaki_registration_callback, &callback);
+    if (error != CHIAKI_ERR_SUCCESS)
+        return error;
+    chiaki_regist_fini(&registration);
+    return callback.finished && callback.success
+        ? MOUSEPLAY_CHIAKI_SUCCESS
+        : MOUSEPLAY_CHIAKI_REGISTRATION_FAILED;
+#else
+    (void)context;
+    (void)host;
+    (void)target;
+    (void)pin;
+    (void)console_pin;
+    (void)psn_account_id;
+    (void)psn_online_id;
+    (void)result;
+    return MOUSEPLAY_CHIAKI_UNAVAILABLE;
 #endif
 }
 

@@ -1,9 +1,12 @@
 mod ffi;
 
 pub use crate::controller::state::ControllerState;
+use std::ffi::{CStr, CString};
+use std::time::Duration;
 
 const SUCCESS: i32 = 0;
 const NOT_LINKED: i32 = 1;
+const REGISTRATION_FAILED: i32 = 4;
 
 const SESSION_AUTH_SIZE: usize = 16;
 
@@ -27,6 +30,7 @@ pub enum RemotePlayError {
     BridgeUnavailable,
     InvalidState,
     SessionNotInitialized,
+    RegistrationFailed,
     Core(i32),
 }
 
@@ -36,6 +40,7 @@ impl std::fmt::Display for RemotePlayError {
             Self::BridgeUnavailable => write!(f, "Chiaki bridge is unavailable"),
             Self::InvalidState => write!(f, "invalid Chiaki bridge state"),
             Self::SessionNotInitialized => write!(f, "Chiaki session is not initialized"),
+            Self::RegistrationFailed => write!(f, "Chiaki discovery or registration failed"),
             Self::Core(code) => write!(f, "Chiaki bridge error {code}"),
         }
     }
@@ -53,6 +58,32 @@ pub struct ChiakiConnectionConfig {
     pub ps5: bool,
     pub regist_key: [u8; SESSION_AUTH_SIZE],
     pub morning: [u8; SESSION_AUTH_SIZE],
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChiakiDiscoveredHost {
+    pub host: String,
+    pub ps5: bool,
+    pub target: i32,
+    pub state: i32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChiakiRegistrationCredentials {
+    pub target: i32,
+    pub regist_key: [u8; SESSION_AUTH_SIZE],
+    pub morning: [u8; SESSION_AUTH_SIZE],
+}
+
+impl ChiakiRegistrationCredentials {
+    pub fn into_connection_config(self, host: String, ps5: bool) -> ChiakiConnectionConfig {
+        ChiakiConnectionConfig {
+            host,
+            ps5,
+            regist_key: self.regist_key,
+            morning: self.morning,
+        }
+    }
 }
 
 impl ChiakiRemotePlay {
@@ -83,6 +114,75 @@ impl ChiakiRemotePlay {
         })
     }
 
+    /// Runs Chiaki's direct discovery request against an address.
+    pub fn discover(
+        &mut self,
+        address: &str,
+        ps5: bool,
+        timeout: Duration,
+    ) -> Result<ChiakiDiscoveredHost, RemotePlayError> {
+        let address = CString::new(address).map_err(|_| RemotePlayError::InvalidState)?;
+        let mut result = ffi::ChiakiDiscoveryResult {
+            host: [0; 256],
+            ps5: false,
+            target: 0,
+            state: 0,
+        };
+        self.call(unsafe {
+            ffi::mouseplay_chiaki_discover(
+                self.context,
+                address.as_ptr(),
+                ps5,
+                timeout.as_millis().min(u64::MAX as u128) as u64,
+                &mut result,
+            )
+        })?;
+        let host = unsafe { CStr::from_ptr(result.host.as_ptr()) }
+            .to_str()
+            .map_err(|_| RemotePlayError::InvalidState)?
+            .to_owned();
+        Ok(ChiakiDiscoveredHost {
+            host,
+            ps5: result.ps5,
+            target: result.target,
+            state: result.state,
+        })
+    }
+
+    /// Runs Chiaki's registration flow and returns its opaque session credentials.
+    pub fn register_ps5(
+        &mut self,
+        host: &str,
+        target: i32,
+        pin: u32,
+        console_pin: u32,
+        psn_account_id: &[u8; 8],
+    ) -> Result<ChiakiRegistrationCredentials, RemotePlayError> {
+        let host = CString::new(host).map_err(|_| RemotePlayError::InvalidState)?;
+        let mut result = ffi::ChiakiRegistrationResult {
+            target: 0,
+            regist_key: [0; SESSION_AUTH_SIZE],
+            morning: [0; SESSION_AUTH_SIZE],
+        };
+        self.call(unsafe {
+            ffi::mouseplay_chiaki_register(
+                self.context,
+                host.as_ptr(),
+                target,
+                pin,
+                console_pin,
+                psn_account_id.as_ptr(),
+                std::ptr::null(),
+                &mut result,
+            )
+        })?;
+        Ok(ChiakiRegistrationCredentials {
+            target: result.target,
+            regist_key: result.regist_key,
+            morning: result.morning,
+        })
+    }
+
     pub fn start(&mut self) -> Result<(), RemotePlayError> {
         self.call(unsafe { ffi::mouseplay_chiaki_context_start(self.context) })
     }
@@ -107,6 +207,7 @@ impl ChiakiRemotePlay {
             NOT_LINKED => Err(RemotePlayError::BridgeUnavailable),
             2 => Err(RemotePlayError::InvalidState),
             3 => Err(RemotePlayError::SessionNotInitialized),
+            REGISTRATION_FAILED => Err(RemotePlayError::RegistrationFailed),
             other => Err(RemotePlayError::Core(other)),
         }
     }
@@ -315,5 +416,19 @@ mod tests {
         remote_play
             .send_controller_state(&ControllerState::default())
             .expect("controller state should be accepted by the initialized Chiaki session");
+    }
+
+    #[test]
+    fn registration_credentials_become_session_configuration_without_reencoding() {
+        let credentials = ChiakiRegistrationCredentials {
+            target: 1_000_100,
+            regist_key: [0x11; SESSION_AUTH_SIZE],
+            morning: [0x22; SESSION_AUTH_SIZE],
+        };
+        let config = credentials.into_connection_config("192.0.2.10".to_owned(), true);
+        assert_eq!(config.host, "192.0.2.10");
+        assert!(config.ps5);
+        assert_eq!(config.regist_key, [0x11; SESSION_AUTH_SIZE]);
+        assert_eq!(config.morning, [0x22; SESSION_AUTH_SIZE]);
     }
 }

@@ -45,11 +45,13 @@ La dependencia concreta es el submódulo C de chiaki-ng fijado en `a9a2805884cfa
 
 Después de configurar la sesión, `ChiakiRemotePlay::start()` llama a `chiaki_session_start()` y `send_controller_state()` llama a `chiaki_session_set_controller_state()`. El feedback sender, la autenticación, el cifrado, la red y el keepalive permanecen en libchiaki.
 
+La API Rust también expone `discover()` y `register_ps5()`. Son wrappers delgados: discovery devuelve el `host_addr`/target de `ChiakiDiscoveryHost`, y registro devuelve `ChiakiRegisteredHost.rp_regist_key` como `regist_key` y `ChiakiRegisteredHost.rp_key` como `morning`. El caller puede convertir esas credenciales con `into_connection_config()` y configurar la sesión sin un DualSense físico.
+
 ## Estado
 
 Fase 5: investigación y límite de integración documentados; transporte Remote Play todavía no implementado.
 
-No se declara conexión PS5 funcional.
+La ruta de integración puede llegar hasta `chiaki_session_start()` con credenciales válidas. No se declara una conexión PS5 probada en este entorno.
 
 ## Fase 5A/5B — core externo y frontera FFI
 

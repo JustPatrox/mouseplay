@@ -39,8 +39,40 @@ pub(crate) struct ChiakiBridgeContext {
     _private: [u8; 0],
 }
 
+#[repr(C)]
+pub(crate) struct ChiakiDiscoveryResult {
+    pub host: [std::os::raw::c_char; 256],
+    pub ps5: bool,
+    pub target: c_int,
+    pub state: c_int,
+}
+
+#[repr(C)]
+pub(crate) struct ChiakiRegistrationResult {
+    pub target: c_int,
+    pub regist_key: [u8; 16],
+    pub morning: [u8; 16],
+}
+
 extern "C" {
     pub(crate) fn mouseplay_chiaki_context_new() -> *mut ChiakiBridgeContext;
+    pub(crate) fn mouseplay_chiaki_discover(
+        context: *mut ChiakiBridgeContext,
+        address: *const std::os::raw::c_char,
+        ps5: bool,
+        timeout_ms: u64,
+        result: *mut ChiakiDiscoveryResult,
+    ) -> c_int;
+    pub(crate) fn mouseplay_chiaki_register(
+        context: *mut ChiakiBridgeContext,
+        host: *const std::os::raw::c_char,
+        target: c_int,
+        pin: u32,
+        console_pin: u32,
+        psn_account_id: *const u8,
+        psn_online_id: *const std::os::raw::c_char,
+        result: *mut ChiakiRegistrationResult,
+    ) -> c_int;
     pub(crate) fn mouseplay_chiaki_context_init_session(
         context: *mut ChiakiBridgeContext,
         host: *const std::os::raw::c_char,

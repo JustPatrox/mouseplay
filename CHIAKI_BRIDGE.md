@@ -29,6 +29,8 @@ El bridge incluye el header público fijado de Chiaki-ng. Rust solo ve `ChiakiRe
 ## Funciones C expuestas
 
 - `mouseplay_chiaki_context_new`
+- `mouseplay_chiaki_discover`
+- `mouseplay_chiaki_register`
 - `mouseplay_chiaki_context_init_session`
 - `mouseplay_chiaki_context_start`
 - `mouseplay_chiaki_context_set_controller_state`
@@ -36,7 +38,7 @@ El bridge incluye el header público fijado de Chiaki-ng. Rust solo ve `ChiakiRe
 - `mouseplay_chiaki_context_free`
 - funciones de comprobación de tamaño/alineación de `ChiakiControllerState`
 
-Con `libchiaki.dylib` construido, `context_new` ejecuta `chiaki_lib_init()` real. `configure_session` entrega a `chiaki_session_init` un host y las credenciales opacas ya obtenidas por discovery/registro; no implementa ninguna de esas operaciones. Después `start`, `send_controller_state` y `stop` llaman a la sesión real de Chiaki. En targets sin core enlazable el bridge se mantiene no disponible.
+Con `libchiaki.dylib` construido, `context_new` ejecuta `chiaki_lib_init()` real. `discover` llama a las APIs de discovery de Chiaki, y `register` llama a `chiaki_regist_start`/`chiaki_regist_fini` y devuelve `rp_regist_key` y `rp_key` sin reinterpretarlos. `configure_session` entrega a `chiaki_session_init` el host y las credenciales opacas; no implementa criptografía ni paquetes. Después `start`, `send_controller_state` y `stop` llaman a la sesión real de Chiaki. En targets sin core enlazable el bridge se mantiene no disponible.
 
 ## Conversión
 
@@ -65,4 +67,4 @@ Chiaki-ng/libchiaki se mantiene bajo AGPL-3.0-only con permiso adicional para en
 
 ## Límite actual
 
-El enlace con `libchiaki` y la creación de `ChiakiSession` son reales. Mouseplay aún no ejecuta discovery, pairing ni registro: el caller debe proporcionar host, `regist_key` y `morning` producidos por Chiaki. La conexión PS5, autenticación, cifrado y keepalive permanecen dentro de libchiaki; no se duplican aquí. No se añadieron vídeo, audio ni UI.
+El enlace con `libchiaki`, discovery directo, registro y creación de `ChiakiSession` son reales. La API de registro recibe el PIN y el PSN Account-ID; todavía no hay UI completa ni persistencia de credenciales en Mouseplay. La conexión PS5, autenticación, cifrado y keepalive permanecen dentro de libchiaki; no se duplican aquí. No se añadieron vídeo, audio ni UI.
