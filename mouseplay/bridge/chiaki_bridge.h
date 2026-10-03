@@ -12,8 +12,9 @@ typedef struct MouseplayChiakiContext MouseplayChiakiContext;
 
 enum {
     MOUSEPLAY_CHIAKI_SUCCESS = 0,
-    MOUSEPLAY_CHIAKI_NOT_LINKED = 1,
+    MOUSEPLAY_CHIAKI_UNAVAILABLE = 1,
     MOUSEPLAY_CHIAKI_INVALID_STATE = 2,
+    MOUSEPLAY_CHIAKI_SESSION_NOT_INITIALIZED = 3,
 };
 
 MouseplayChiakiContext *mouseplay_chiaki_context_new(void);

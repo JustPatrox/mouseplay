@@ -1,6 +1,6 @@
 # Plan de integración de Chiaki-ng con Mouseplay
 
-**Estado:** investigación y planificación únicamente. No se ha añadido Chiaki-ng, no se ha modificado código fuente de Mouseplay y no se ha implementado una sesión experimental.
+**Estado:** plan actualizado tras integrar el core C externo. Chiaki-ng permanece como submódulo fijado; `libchiaki.dylib` se construye fuera del crate y se enlaza mediante `mouseplay/build.rs`. Discovery, pairing, registro y sesión PS5 siguen fuera de esta fase.
 
 **Referencia investigada:** `streetpea/chiaki-ng`, rama `main`, especialmente `lib/include/chiaki/`, `lib/src/`, `lib/CMakeLists.txt` y `CMakeLists.txt`. La API y las estructuras descritas abajo deben fijarse a un commit/tag concreto antes de implementar, porque `main` puede cambiar.
 
@@ -25,6 +25,8 @@ ControllerState
 - `REMOTE_PLAY.md` confirma que el repositorio no contiene sockets, discovery, pairing, autenticación, cifrado ni sesión PS4/PS5.
 
 Por tanto, la integración no debe extender `DS4` hacia la red. Debe añadir un adaptador separado después de `ControllerState`.
+
+La build reproducible actual usa `scripts/build-chiaki-macos.sh`, CMake y Makefiles de macOS. El script configura `BUILD_SHARED_LIBS=ON`, `CMAKE_OSX_ARCHITECTURES=arm64`, deployment target 13.0 y desactiva GUI, CLI, tests, Steam Deck, Setsu, Speex, FFmpeg, Pi decoder, Opus y Steam shortcut. El resultado esperado es `target/chiaki-ng-arm64-shared/lib/libchiaki.dylib`.
 
 ## 2. Arquitectura propuesta
 
@@ -244,7 +246,7 @@ Eso demuestra que el proyecto completo puede compilar para Apple Silicon; no dem
 5. producir y ejecutar tests del `chiaki-lib`/bridge en macOS arm64;
 6. fijar los commits y los artefactos resultantes.
 
-`cargo check --target aarch64-apple-darwin` de Mouseplay no valida todavía el enlace de Chiaki; esa comprobación debe añadirse solo después de que exista una dependencia reproducible.
+`cargo check --target aarch64-apple-darwin` de Mouseplay exige que exista esa build en `MOUSEPLAY_CHIAKI_BUILD_DIR` o en `target/chiaki-ng-arm64-shared`. `build.rs` añade los headers públicos y generados, enlaza `libchiaki.dylib` y copia la dylib junto a los binarios Cargo para las pruebas.
 
 ## 9. Licencias
 
@@ -312,7 +314,7 @@ No se recomienda:
 - enlazar todos los internals C mediante bindings automáticos;
 - seguir `main` sin commit/tag reproducible.
 
-La primera implementación futura debe detenerse después de obtener `chiaki-lib` compilable y un bridge que cree/destruya una sesión. Solo después deben añadirse registration, input, vídeo/audio y pruebas con PS5.
+La implementación actual se detiene después de obtener `chiaki-lib` compilable, enlazarlo al bridge y ejecutar `chiaki_lib_init()`. El contexto todavía no crea una `ChiakiSession` porque faltan los datos de discovery/registro. Solo después deben añadirse registration, input de sesión, vídeo/audio y pruebas con PS5.
 
 ## Fuentes consultadas
 

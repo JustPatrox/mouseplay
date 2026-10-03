@@ -35,7 +35,7 @@ El bridge incluye el header público fijado de Chiaki-ng. Rust solo ve `ChiakiRe
 - `mouseplay_chiaki_context_free`
 - funciones de comprobación de tamaño/alineación de `ChiakiControllerState`
 
-En esta subfase, `context_new` devuelve nulo y Rust comunica `CoreNotLinked`. Esto deja una frontera compilable y verificable sin fingir una sesión Remote Play. La implementación de contexto real requiere construir `chiaki-lib` con CMake y se hará en la siguiente subfase.
+Con `libchiaki.dylib` construido, `context_new` ejecuta `chiaki_lib_init()` real y devuelve un contexto operativo. `start`, `send_controller_state` y `stop` devuelven `SessionNotInitialized` hasta que una subfase posterior cree `ChiakiSession` con sus datos de conexión. En targets sin core enlazable el bridge se mantiene no disponible para no fingir una sesión.
 
 ## Conversión
 
@@ -64,4 +64,4 @@ Chiaki-ng/libchiaki se mantiene bajo AGPL-3.0-only con permiso adicional para en
 
 ## No implementado todavía
 
-No existe aún enlace funcional con `libchiaki`, discovery, pairing, registro, credenciales, autenticación completa, conexión PS5, keepalive operativo, vídeo, audio ni UI.
+El enlace con `libchiaki` ya es real y `chiaki_lib_init()` se ejecuta en el test de integración del bridge. No existe todavía sesión configurada: discovery, pairing, registro, credenciales, autenticación completa, conexión PS5, keepalive operativo, vídeo, audio ni UI siguen pendientes.

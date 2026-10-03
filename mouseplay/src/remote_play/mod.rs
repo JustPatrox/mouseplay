@@ -22,16 +22,18 @@ const ANALOG_R2: u32 = 1 << 17;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RemotePlayError {
-    CoreNotLinked,
+    BridgeUnavailable,
     InvalidState,
+    SessionNotInitialized,
     Core(i32),
 }
 
 impl std::fmt::Display for RemotePlayError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::CoreNotLinked => write!(f, "Chiaki core is not linked"),
+            Self::BridgeUnavailable => write!(f, "Chiaki bridge is unavailable"),
             Self::InvalidState => write!(f, "invalid Chiaki bridge state"),
+            Self::SessionNotInitialized => write!(f, "Chiaki session is not initialized"),
             Self::Core(code) => write!(f, "Chiaki bridge error {code}"),
         }
     }
@@ -47,7 +49,7 @@ impl ChiakiRemotePlay {
     pub fn new() -> Result<Self, RemotePlayError> {
         let context = unsafe { ffi::mouseplay_chiaki_context_new() };
         if context.is_null() {
-            return Err(RemotePlayError::CoreNotLinked);
+            return Err(RemotePlayError::BridgeUnavailable);
         }
         Ok(Self { context })
     }
@@ -73,8 +75,9 @@ impl ChiakiRemotePlay {
     fn call(&self, code: i32) -> Result<(), RemotePlayError> {
         match code {
             SUCCESS => Ok(()),
-            NOT_LINKED => Err(RemotePlayError::CoreNotLinked),
+            NOT_LINKED => Err(RemotePlayError::BridgeUnavailable),
             2 => Err(RemotePlayError::InvalidState),
+            3 => Err(RemotePlayError::SessionNotInitialized),
             other => Err(RemotePlayError::Core(other)),
         }
     }
@@ -246,5 +249,23 @@ mod tests {
         assert_eq!(std::mem::align_of::<ffi::ChiakiControllerState>(), unsafe {
             ffi::mouseplay_chiaki_controller_state_alignment()
         });
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn linked_core_initializes_without_a_remote_play_session() {
+        let mut remote_play = ChiakiRemotePlay::new().expect("linked libchiaki must initialize");
+        assert_eq!(
+            remote_play.start(),
+            Err(RemotePlayError::SessionNotInitialized)
+        );
+        assert_eq!(
+            remote_play.send_controller_state(&ControllerState::default()),
+            Err(RemotePlayError::SessionNotInitialized)
+        );
+        assert_eq!(
+            remote_play.stop(),
+            Err(RemotePlayError::SessionNotInitialized)
+        );
     }
 }

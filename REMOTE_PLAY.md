@@ -59,6 +59,6 @@ La referencia está en `third-party/chiaki-ng` como submódulo; Mouseplay no cop
 
 La API Rust expuesta es `mouseplay::remote_play::ChiakiRemotePlay` con `new`, `start`, `send_controller_state` y `stop`. La conversión cubre sticks, triggers, botones, click de touchpad y valores neutrales de motion/touch no representados por Mouseplay. La API C mantiene handles opacos y reserva las operaciones de contexto/sesión para la siguiente subfase, cuando exista un build enlazable de `chiaki-lib`.
 
-Estado actual: el bridge compila y la FFI valida la estructura pública real de Chiaki, pero el contexto devuelve `CoreNotLinked` porque la biblioteca `chiaki-lib` todavía no se construye ni se enlaza. No existe conexión PS5, discovery, pairing, registro, vídeo, audio ni autenticación implementada.
+Estado actual: el bridge compila y enlaza contra `libchiaki.dylib`; `ChiakiRemotePlay::new()` ejecuta `chiaki_lib_init()` real. El contexto no crea todavía una `ChiakiSession` porque esa operación requiere datos de discovery/registro, que pertenecen a la siguiente subfase. No existe conexión PS5, discovery, pairing, registro, vídeo, audio ni autenticación implementada.
 
 Para reproducir el checkout se deben inicializar submódulos (`git clone --recurse-submodules` o `git submodule update --init --recursive`) y conservar el commit fijado. La licencia del submódulo sigue siendo AGPL-3.0-only con el permiso adicional de OpenSSL descrito en `CHIAKI_INTEGRATION_PLAN.md`.
