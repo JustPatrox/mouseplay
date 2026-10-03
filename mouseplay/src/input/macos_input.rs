@@ -9,6 +9,8 @@ use core_graphics::event::{
     CGEvent, CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType,
     EventField, KeyCode,
 };
+use core_graphics::display::CGDisplay;
+use core_graphics::geometry::CGPoint;
 use lazy_static::lazy_static;
 
 use crate::controller::state::ControllerState;
@@ -25,6 +27,40 @@ lazy_static! {
 }
 
 static EVENT_TAP_STARTED: AtomicBool = AtomicBool::new(false);
+static GAME_MODE_ACTIVE: AtomicBool = AtomicBool::new(false);
+static WARPING_CURSOR: AtomicBool = AtomicBool::new(false);
+static CURSOR_CENTER_X: RwLock<f64> = RwLock::new(0.0);
+static CURSOR_CENTER_Y: RwLock<f64> = RwLock::new(0.0);
+
+pub fn configure_game_mode_center(x: f64, y: f64) {
+    if let Ok(mut center_x) = CURSOR_CENTER_X.write() {
+        *center_x = x;
+    }
+    if let Ok(mut center_y) = CURSOR_CENTER_Y.write() {
+        *center_y = y;
+    }
+}
+
+pub fn game_mode_active() -> bool {
+    GAME_MODE_ACTIVE.load(Ordering::SeqCst)
+}
+
+fn toggle_game_mode() {
+    let active = !GAME_MODE_ACTIVE.load(Ordering::SeqCst);
+    GAME_MODE_ACTIVE.store(active, Ordering::SeqCst);
+    if active {
+        let x = CURSOR_CENTER_X.read().map(|value| *value).unwrap_or(0.0);
+        let y = CURSOR_CENTER_Y.read().map(|value| *value).unwrap_or(0.0);
+        let _ = CGDisplay::main().hide_cursor();
+        let _ = CGDisplay::associate_mouse_and_mouse_cursor_position(false);
+        WARPING_CURSOR.store(true, Ordering::SeqCst);
+        let _ = CGDisplay::warp_mouse_cursor_position(CGPoint::new(x, y));
+        WARPING_CURSOR.store(false, Ordering::SeqCst);
+    } else {
+        let _ = CGDisplay::associate_mouse_and_mouse_cursor_position(true);
+        let _ = CGDisplay::main().show_cursor();
+    }
+}
 
 pub struct RawInput {
     keys: [bool; 128],
@@ -166,13 +202,26 @@ fn run_event_tap() {
     let tap = match CGEventTap::new(
         CGEventTapLocation::HID,
         CGEventTapPlacement::HeadInsertEventTap,
-        CGEventTapOptions::ListenOnly,
+        CGEventTapOptions::Default,
         events,
         |_proxy, event_type, event| {
-            if let Ok(mut raw_input) = RAW_INPUT.write() {
-                record_event(&mut raw_input, event_type, event);
+            let f6 = matches!(event_type, CGEventType::KeyDown)
+                && event.get_integer_value_field(EventField::KEYBOARD_EVENT_KEYCODE)
+                    == i64::from(KeyCode::F6);
+            if f6 {
+                toggle_game_mode();
+                return None;
             }
-            None
+            if GAME_MODE_ACTIVE.load(Ordering::SeqCst) {
+                if !WARPING_CURSOR.load(Ordering::SeqCst) {
+                    if let Ok(mut raw_input) = RAW_INPUT.write() {
+                        record_event(&mut raw_input, event_type, event);
+                    }
+                }
+                None
+            } else {
+                Some(event.clone())
+            }
         },
     ) {
         Ok(tap) => tap,
@@ -249,6 +298,7 @@ fn key_code(name: &str) -> Option<u16> {
         "f1" => KeyCode::F1,
         "f2" => KeyCode::F2,
         "f3" => KeyCode::F3,
+        "f6" => KeyCode::F6,
         _ => return None,
     })
 }

@@ -102,13 +102,17 @@ fn worker_loop(command_rx: Receiver<Command>, events: Sender<UiEvent>) {
                 Err(mpsc::TryRecvError::Empty) => {}
                 Err(mpsc::TryRecvError::Disconnected) => return,
             }
-            mouseplay::tick_input();
-            if let Some(remote_play) = remote_play.as_mut() {
-                if let Err(error) =
-                    remote_play.send_controller_state(&mouseplay::controller_state())
-                {
-                    let _ = events.send(UiEvent::Log(format!("ControllerState: {error}")));
+            if mouseplay::game_mode_active() {
+                mouseplay::tick_input();
+                if let Some(remote_play) = remote_play.as_mut() {
+                    if let Err(error) =
+                        remote_play.send_controller_state(&mouseplay::controller_state())
+                    {
+                        let _ = events.send(UiEvent::Log(format!("ControllerState: {error}")));
+                    }
                 }
+            }
+            if let Some(remote_play) = remote_play.as_mut() {
                 if let Ok(Some((width, height, rgba))) = remote_play.take_video_frame() {
                     let _ = events.send(UiEvent::Video { width, height, rgba });
                 }
@@ -284,6 +288,7 @@ fn app_delegate_class() -> &'static Class {
             .expect("unable to declare AppKit delegate");
         declaration.add_ivar::<id>("window");
         declaration.add_ivar::<id>("status");
+        declaration.add_ivar::<id>("controls");
         declaration.add_ivar::<id>("logs");
         declaration.add_ivar::<id>("video");
         declaration.add_ivar::<id>("waiting");
@@ -418,6 +423,12 @@ extern "C" fn poll_action(this: &mut Object, _: Sel, _: id) {
                 }
             }
         }
+        let controls = *this.get_ivar::<id>("controls");
+        if mouseplay::game_mode_active() {
+            set_text(controls, "Controles: ACTIVOS · F6 para liberar mouse");
+        } else {
+            set_text(controls, "Controles: INACTIVOS · F6 para capturar mouse");
+        }
     }
 }
 
@@ -513,9 +524,9 @@ fn build_window(delegate: id) {
             "Desconectado",
             NSRect::new(NSPoint::new(28.0, 290.0), NSSize::new(650.0, 25.0)),
         );
-        add_label(
+        let controls = add_label(
             content,
-            "Controles: teclado + mouse mediante Quartz",
+            "Controles: INACTIVOS · F6 para capturar mouse",
             NSRect::new(NSPoint::new(28.0, 255.0), NSSize::new(650.0, 22.0)),
         );
         add_label(
@@ -543,10 +554,18 @@ fn build_window(delegate: id) {
         set_ivar(&mut *delegate, "pin", pin);
         set_ivar(&mut *delegate, "account", account);
         set_ivar(&mut *delegate, "status", status);
+        set_ivar(&mut *delegate, "controls", controls);
         set_ivar(&mut *delegate, "logs", logs);
         set_ivar(&mut *delegate, "video", video);
         set_ivar(&mut *delegate, "waiting", waiting);
         let _: () = msg_send![window, makeKeyAndOrderFront: nil];
+        let window_frame: NSRect = msg_send![window, frame];
+        let screen: id = msg_send![class!(NSScreen), mainScreen];
+        let screen_frame: NSRect = msg_send![screen, frame];
+        let center_x = window_frame.origin.x + window_frame.size.width / 2.0;
+        let center_y = screen_frame.origin.y + screen_frame.size.height
+            - window_frame.origin.y - window_frame.size.height / 2.0;
+        mouseplay::configure_game_mode_center(center_x, center_y);
 
         let timer: id = msg_send![class!(NSTimer), scheduledTimerWithTimeInterval: 0.2f64 target: delegate selector: sel!(poll:) userInfo: nil repeats: YES];
         let _: () = msg_send![timer, retain];

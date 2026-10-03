@@ -57,6 +57,24 @@ pub fn controller_state() -> controller::state::ControllerState {
     }
 }
 
+#[cfg(target_os = "macos")]
+pub fn configure_game_mode_center(x: f64, y: f64) {
+    input::raw_input::configure_game_mode_center(x, y);
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn configure_game_mode_center(_x: f64, _y: f64) {}
+
+#[cfg(target_os = "macos")]
+pub fn game_mode_active() -> bool {
+    input::raw_input::game_mode_active()
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn game_mode_active() -> bool {
+    false
+}
+
 // --- MANTEMOS O DLLMAIN PARA CASO QUEIRA USAR COMO DLL ---
 #[cfg(windows)]
 #[no_mangle]
