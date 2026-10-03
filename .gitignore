@@ -3,3 +3,6 @@
 *.swp
 .vscode
 Cargo.lock
+AGENTS.md
+.agent
+CODEX_TASK.md
