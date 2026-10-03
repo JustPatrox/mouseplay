@@ -201,6 +201,32 @@ impl ChiakiRemotePlay {
         self.call(unsafe { ffi::mouseplay_chiaki_context_stop(self.context) })
     }
 
+    pub fn take_video_frame(&mut self) -> Result<Option<(u32, u32, Vec<u8>)>, RemotePlayError> {
+        let mut rgba = std::ptr::null_mut();
+        let mut size = 0usize;
+        let mut width = 0u32;
+        let mut height = 0u32;
+        let code = unsafe {
+            ffi::mouseplay_chiaki_context_take_video_frame(
+                self.context,
+                &mut rgba,
+                &mut size,
+                &mut width,
+                &mut height,
+            )
+        };
+        if code == REGISTRATION_FAILED {
+            return Ok(None);
+        }
+        self.call(code)?;
+        if rgba.is_null() {
+            return Ok(None);
+        }
+        let bytes = unsafe { std::slice::from_raw_parts(rgba, size).to_vec() };
+        unsafe { ffi::mouseplay_chiaki_video_frame_free(rgba) };
+        Ok(Some((width, height, bytes)))
+    }
+
     fn call(&self, code: i32) -> Result<(), RemotePlayError> {
         match code {
             SUCCESS => Ok(()),

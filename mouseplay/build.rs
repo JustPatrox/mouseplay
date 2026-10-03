@@ -31,6 +31,18 @@ fn main() {
         println!("cargo:rerun-if-env-changed=MOUSEPLAY_CHIAKI_BUILD_DIR");
         println!("cargo:rustc-link-search=native={}", lib_dir.display());
         println!("cargo:rustc-link-lib=dylib=chiaki");
+        let ffmpeg_prefixes = [
+            std::path::PathBuf::from("/opt/homebrew/opt/ffmpeg"),
+            std::path::PathBuf::from("/usr/local/opt/ffmpeg"),
+        ];
+        let ffmpeg_prefix = ffmpeg_prefixes
+            .iter()
+        .into_iter()
+        .find(|prefix| prefix.join("include/libavutil/frame.h").is_file())
+        .expect("FFmpeg headers not found; install Homebrew ffmpeg");
+        println!("cargo:rustc-link-search=native={}", ffmpeg_prefix.join("lib").display());
+        println!("cargo:rustc-link-lib=dylib=avutil");
+        build.include(ffmpeg_prefix.join("include"));
         let out_dir = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap());
         if let Some(profile_dir) = out_dir.ancestors().nth(3) {
             let deps_dir = profile_dir.join("deps");

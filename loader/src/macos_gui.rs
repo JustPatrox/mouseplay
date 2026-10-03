@@ -46,6 +46,7 @@ enum UiEvent {
     Status(String),
     Host(ChiakiDiscoveredHost),
     Credentials(ChiakiRegistrationCredentials),
+    Video { width: u32, height: u32, rgba: Vec<u8> },
 }
 
 struct WorkerHandle {
@@ -107,6 +108,9 @@ fn worker_loop(command_rx: Receiver<Command>, events: Sender<UiEvent>) {
                     remote_play.send_controller_state(&mouseplay::controller_state())
                 {
                     let _ = events.send(UiEvent::Log(format!("ControllerState: {error}")));
+                }
+                if let Ok(Some((width, height, rgba))) = remote_play.take_video_frame() {
+                    let _ = events.send(UiEvent::Video { width, height, rgba });
                 }
             }
             thread::sleep(Duration::from_millis(8));
@@ -222,6 +226,29 @@ unsafe fn set_text(field: id, value: &str) {
     let _: () = msg_send![field, setStringValue: string];
 }
 
+unsafe fn set_video_image(view: id, width: u32, height: u32, rgba: &[u8]) {
+    let data: id = msg_send![class!(NSMutableData), dataWithBytes: rgba.as_ptr() length: rgba.len()];
+    let bitmap_data: *mut u8 = msg_send![data, mutableBytes];
+    let rep: id = msg_send![class!(NSBitmapImageRep), alloc];
+    let rep: id = msg_send![rep,
+        initWithBitmapData: bitmap_data
+        pixelsWide: width as usize
+        pixelsHigh: height as usize
+        bitsPerSample: 8usize
+        samplesPerPixel: 4usize
+        hasAlpha: YES
+        isPlanar: NO
+        colorSpaceName: ns_string("NSDeviceRGBColorSpace")
+        bitmapFormat: (1usize << 8) | 1usize
+        bytesPerRow: (width as usize) * 4usize
+        bitsPerPixel: 32usize];
+    let image: id = msg_send![class!(NSImage), alloc];
+    let image: id = msg_send![image, initWithSize: NSSize::new(width as f64, height as f64)];
+    let _: () = msg_send![image, addRepresentation: rep];
+    let _: () = msg_send![view, setImage: image];
+    let _: () = msg_send![view, setNeedsDisplay: YES];
+}
+
 unsafe fn add_label(content: id, text: &str, frame: NSRect) -> id {
     let label: id = msg_send![class!(NSTextField), labelWithString: ns_string(text)];
     let _: () = msg_send![label, setFrame: frame];
@@ -258,6 +285,8 @@ fn app_delegate_class() -> &'static Class {
         declaration.add_ivar::<id>("window");
         declaration.add_ivar::<id>("status");
         declaration.add_ivar::<id>("logs");
+        declaration.add_ivar::<id>("video");
+        declaration.add_ivar::<id>("waiting");
         declaration.add_ivar::<id>("host");
         declaration.add_ivar::<id>("pin");
         declaration.add_ivar::<id>("account");
@@ -382,6 +411,11 @@ extern "C" fn poll_action(this: &mut Object, _: Sel, _: id) {
                 UiEvent::Credentials(credentials) => {
                     gui_state(this).credentials = Some(credentials);
                 }
+                UiEvent::Video { width, height, rgba } => {
+                    set_video_image(*this.get_ivar::<id>("video"), width, height, &rgba);
+                    let _: () = msg_send![*this.get_ivar::<id>("waiting"), setHidden: YES];
+                    set_text(*this.get_ivar::<id>("status"), "Conectado · Video recibido");
+                }
             }
         }
     }
@@ -489,8 +523,18 @@ fn build_window(delegate: id) {
             "Estado / Logs",
             NSRect::new(NSPoint::new(28.0, 215.0), NSSize::new(650.0, 22.0)),
         );
+        let video: id = msg_send![class!(NSImageView), alloc];
+        let video: id = msg_send![video, initWithFrame: NSRect::new(NSPoint::new(28.0, 28.0), NSSize::new(650.0, 180.0))];
+        let _: () = msg_send![video, setImageScaling: 2usize];
+        let _: () = msg_send![video, setImageFrameStyle: 1usize];
+        let _: () = msg_send![content, addSubview: video];
+        let waiting = add_label(
+            content,
+            "Esperando video...",
+            NSRect::new(NSPoint::new(28.0, 110.0), NSSize::new(650.0, 22.0)),
+        );
         let logs: id = msg_send![class!(NSTextView), alloc];
-        let logs: id = msg_send![logs, initWithFrame: NSRect::new(NSPoint::new(28.0, 28.0), NSSize::new(650.0, 180.0))];
+        let logs: id = msg_send![logs, initWithFrame: NSRect::new(NSPoint::new(28.0, 28.0), NSSize::new(1.0, 1.0))];
         let _: () = msg_send![logs, setEditable: NO];
         let _: () = msg_send![content, addSubview: logs];
 
@@ -500,6 +544,8 @@ fn build_window(delegate: id) {
         set_ivar(&mut *delegate, "account", account);
         set_ivar(&mut *delegate, "status", status);
         set_ivar(&mut *delegate, "logs", logs);
+        set_ivar(&mut *delegate, "video", video);
+        set_ivar(&mut *delegate, "waiting", waiting);
         let _: () = msg_send![window, makeKeyAndOrderFront: nil];
 
         let timer: id = msg_send![class!(NSTimer), scheduledTimerWithTimeInterval: 0.2f64 target: delegate selector: sel!(poll:) userInfo: nil repeats: YES];

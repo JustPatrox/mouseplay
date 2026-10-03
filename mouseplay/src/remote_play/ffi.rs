@@ -85,6 +85,14 @@ extern "C" {
         context: *mut ChiakiBridgeContext,
         state: *const ChiakiControllerState,
     ) -> c_int;
+    pub(crate) fn mouseplay_chiaki_context_take_video_frame(
+        context: *mut ChiakiBridgeContext,
+        rgba: *mut *mut u8,
+        size: *mut usize,
+        width: *mut u32,
+        height: *mut u32,
+    ) -> c_int;
+    pub(crate) fn mouseplay_chiaki_video_frame_free(rgba: *mut u8);
     pub(crate) fn mouseplay_chiaki_context_stop(context: *mut ChiakiBridgeContext) -> c_int;
     pub(crate) fn mouseplay_chiaki_context_free(context: *mut ChiakiBridgeContext);
     pub(crate) fn mouseplay_chiaki_controller_state_size() -> usize;

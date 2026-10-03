@@ -57,6 +57,13 @@ int mouseplay_chiaki_context_init_session(
 int mouseplay_chiaki_context_start(MouseplayChiakiContext *context);
 int mouseplay_chiaki_context_set_controller_state(
     MouseplayChiakiContext *context, const void *chiaki_controller_state);
+int mouseplay_chiaki_context_take_video_frame(
+    MouseplayChiakiContext *context,
+    uint8_t **rgba,
+    size_t *size,
+    uint32_t *width,
+    uint32_t *height);
+void mouseplay_chiaki_video_frame_free(uint8_t *rgba);
 int mouseplay_chiaki_context_stop(MouseplayChiakiContext *context);
 void mouseplay_chiaki_context_free(MouseplayChiakiContext *context);
 size_t mouseplay_chiaki_controller_state_size(void);

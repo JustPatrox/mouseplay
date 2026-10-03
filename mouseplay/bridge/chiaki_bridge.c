@@ -15,6 +15,9 @@ typedef SSIZE_T ssize_t;
 #include <chiaki/log.h>
 #include <chiaki/regist.h>
 #include <chiaki/session.h>
+#include <chiaki/ffmpegdecoder.h>
+#include <libavutil/frame.h>
+#include <libavutil/pixfmt.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netdb.h>
@@ -82,10 +85,80 @@ struct MouseplayChiakiContext {
     ChiakiLog log;
     bool session_initialized;
     bool session_started;
+    ChiakiFfmpegDecoder decoder;
+    bool decoder_initialized;
+    pthread_mutex_t video_mutex;
+    uint8_t *video_rgba;
+    size_t video_rgba_size;
+    uint32_t video_width;
+    uint32_t video_height;
 #else
     int reserved;
 #endif
 };
+
+#if defined(MOUSEPLAY_CHIAKI_LINKED)
+static uint8_t mouseplay_clamp_u8(int value)
+{
+    return (uint8_t)(value < 0 ? 0 : value > 255 ? 255 : value);
+}
+
+static void mouseplay_yuv_to_bgra(uint8_t *dst, const AVFrame *frame)
+{
+    for (int y = 0; y < frame->height; y++) {
+        for (int x = 0; x < frame->width; x++) {
+            int y_value = frame->data[0][y * frame->linesize[0] + x];
+            int uv_y = y / 2;
+            int uv_x = x / 2;
+            int u;
+            int v;
+            if (frame->format == AV_PIX_FMT_NV12) {
+                u = frame->data[1][uv_y * frame->linesize[1] + uv_x * 2];
+                v = frame->data[1][uv_y * frame->linesize[1] + uv_x * 2 + 1];
+            } else {
+                u = frame->data[1][uv_y * frame->linesize[1] + uv_x];
+                v = frame->data[2][uv_y * frame->linesize[2] + uv_x];
+            }
+            int c = y_value - 16;
+            int d = u - 128;
+            int e = v - 128;
+            uint8_t *pixel = dst + ((size_t)y * (size_t)frame->width + (size_t)x) * 4;
+            pixel[0] = mouseplay_clamp_u8((298 * c + 516 * d + 128) >> 8);
+            pixel[1] = mouseplay_clamp_u8((298 * c - 100 * d - 208 * e + 128) >> 8);
+            pixel[2] = mouseplay_clamp_u8((298 * c + 409 * e + 128) >> 8);
+            pixel[3] = 255;
+        }
+    }
+}
+
+static void mouseplay_video_frame_available(ChiakiFfmpegDecoder *decoder, void *user)
+{
+    MouseplayChiakiContext *context = user;
+    int32_t frames_lost = 0;
+    ChiakiFfmpegFrame decoded = chiaki_ffmpeg_decoder_pull_frame(decoder, &frames_lost);
+    (void)frames_lost;
+    if (!context || !decoded.frame || decoded.frame->width <= 0 || decoded.frame->height <= 0)
+        goto done;
+    if (decoded.frame->format != AV_PIX_FMT_YUV420P && decoded.frame->format != AV_PIX_FMT_NV12)
+        goto done;
+
+    size_t size = (size_t)decoded.frame->width * (size_t)decoded.frame->height * 4;
+    uint8_t *rgba = malloc(size);
+    if (!rgba)
+        goto done;
+    mouseplay_yuv_to_bgra(rgba, decoded.frame);
+    pthread_mutex_lock(&context->video_mutex);
+    free(context->video_rgba);
+    context->video_rgba = rgba;
+    context->video_rgba_size = size;
+    context->video_width = (uint32_t)decoded.frame->width;
+    context->video_height = (uint32_t)decoded.frame->height;
+    pthread_mutex_unlock(&context->video_mutex);
+done:
+    if (decoded.frame)
+        av_frame_free(&decoded.frame);
+}
+#endif
 
 MouseplayChiakiContext *mouseplay_chiaki_context_new(void)
 {
@@ -96,6 +169,7 @@ MouseplayChiakiContext *mouseplay_chiaki_context_new(void)
         return NULL;
     }
     chiaki_log_init(&context->log, CHIAKI_LOG_ERROR, chiaki_log_cb_print, NULL);
+    pthread_mutex_init(&context->video_mutex, NULL);
     return context;
 #else
     return NULL;
@@ -286,7 +360,7 @@ int mouseplay_chiaki_context_init_session(
     connect_info.video_profile_auto_downgrade = true;
     connect_info.enable_keyboard = false;
     connect_info.enable_dualsense = false;
-    connect_info.audio_video_disabled = CHIAKI_AUDIO_VIDEO_DISABLED;
+    connect_info.audio_video_disabled = CHIAKI_AUDIO_DISABLED;
     connect_info.auto_regist = false;
     connect_info.packet_loss_max = 0.0;
 
@@ -294,6 +368,18 @@ int mouseplay_chiaki_context_init_session(
     if (error != CHIAKI_ERR_SUCCESS)
         return error;
     context->session_initialized = true;
+    error = chiaki_ffmpeg_decoder_init(
+        &context->decoder, &context->log, connect_info.video_profile.codec,
+        connect_info.video_profile.max_fps, NULL, NULL,
+        mouseplay_video_frame_available, context);
+    if (error != CHIAKI_ERR_SUCCESS) {
+        chiaki_session_fini(&context->session);
+        context->session_initialized = false;
+        return error;
+    }
+    context->decoder_initialized = true;
+    chiaki_session_set_video_sample_cb(
+        &context->session, chiaki_ffmpeg_decoder_video_sample_cb, &context->decoder);
     return MOUSEPLAY_CHIAKI_SUCCESS;
 #else
     (void)context;
@@ -341,6 +427,40 @@ int mouseplay_chiaki_context_set_controller_state(
 #endif
 }
 
+int mouseplay_chiaki_context_take_video_frame(
+    MouseplayChiakiContext *context,
+    uint8_t **rgba,
+    size_t *size,
+    uint32_t *width,
+    uint32_t *height)
+{
+#if defined(MOUSEPLAY_CHIAKI_LINKED)
+    if (!context || !rgba || !size || !width || !height)
+        return MOUSEPLAY_CHIAKI_INVALID_STATE;
+    pthread_mutex_lock(&context->video_mutex);
+    if (!context->video_rgba) {
+        pthread_mutex_unlock(&context->video_mutex);
+        return MOUSEPLAY_CHIAKI_REGISTRATION_FAILED;
+    }
+    *rgba = context->video_rgba;
+    *size = context->video_rgba_size;
+    *width = context->video_width;
+    *height = context->video_height;
+    context->video_rgba = NULL;
+    context->video_rgba_size = 0;
+    pthread_mutex_unlock(&context->video_mutex);
+    return MOUSEPLAY_CHIAKI_SUCCESS;
+#else
+    (void)context; (void)rgba; (void)size; (void)width; (void)height;
+    return MOUSEPLAY_CHIAKI_UNAVAILABLE;
+#endif
+}
+
+void mouseplay_chiaki_video_frame_free(uint8_t *rgba)
+{
+    free(rgba);
+}
+
 int mouseplay_chiaki_context_stop(MouseplayChiakiContext *context)
 {
 #if defined(MOUSEPLAY_CHIAKI_LINKED)
@@ -366,8 +486,17 @@ void mouseplay_chiaki_context_free(MouseplayChiakiContext *context)
                 chiaki_session_stop(&context->session);
                 chiaki_session_join(&context->session);
             }
+            if (context->decoder_initialized) {
+                chiaki_ffmpeg_decoder_fini(&context->decoder);
+                context->decoder_initialized = false;
+            }
             chiaki_session_fini(&context->session);
         }
+        pthread_mutex_lock(&context->video_mutex);
+        free(context->video_rgba);
+        context->video_rgba = NULL;
+        pthread_mutex_unlock(&context->video_mutex);
+        pthread_mutex_destroy(&context->video_mutex);
         free(context);
     }
 #else
