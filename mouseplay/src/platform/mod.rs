@@ -11,3 +11,8 @@ pub fn setup() {
     #[cfg(target_os = "macos")]
     macos::setup();
 }
+
+pub fn tick() {
+    #[cfg(target_os = "macos")]
+    macos::tick();
+}

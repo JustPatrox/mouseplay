@@ -28,6 +28,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     // 4. LOOP INFINITO IMPORTANTE
     // Sem isso, o loader.exe executa as linhas acima e fecha instantaneamente.
     loop {
+        platform::tick();
         // Dorme um pouco para não usar 100% da CPU
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
