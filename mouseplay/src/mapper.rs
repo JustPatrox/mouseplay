@@ -24,10 +24,25 @@ lazy_static! {
 }
 
 pub fn load(file_name: &str) -> Result<(), &'static str> {
-    let library_dir = get_library_dir()?;
+    let path = resolve_mapping_path(file_name)?;
     let mut lock = MAPPER.write().map_err(|_| "unable to lock mapper")?;
-    *lock = Some(Mapper::load(library_dir.join(file_name))?);
+    *lock = Some(Mapper::load(path)?);
     Ok(())
+}
+
+fn resolve_mapping_path(file_name: &str) -> Result<PathBuf, &'static str> {
+    let requested = Path::new(file_name);
+
+    // Preserve the existing behavior for absolute paths and paths relative to
+    // the process working directory.
+    if requested.is_absolute() || requested.exists() {
+        return Ok(requested.to_path_buf());
+    }
+
+    // If the caller supplied a relative path that is not present in the
+    // current directory, try the executable/library directory used by the
+    // original Windows loader behavior.
+    Ok(get_library_dir()?.join(requested))
 }
 
 fn get_library_dir() -> Result<PathBuf, &'static str> {
@@ -176,7 +191,7 @@ impl MouseMapping {
         let z = norm.powf(exponent);
 
         let z_x = multiplier[0] * f64::copysign(z * angle_cos, mouse[0]);
-        let z_y = multiplier[0] * f64::copysign(z * angle_sin, mouse[1]);
+        let z_y = multiplier[1] * f64::copysign(z * angle_sin, mouse[1]);
 
         let raw_output = [
             Self::update_axis(&mut axis[0], dead_zone[0], z_x, max_axis, min_axis),
@@ -355,5 +370,70 @@ impl Mapper {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Mapper, Mapping};
+    use crate::{controller::ds4::DS4, input::raw_input::RawInput};
+
+    #[test]
+    fn loads_existing_mapping_json() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../mappings/overwatch.json");
+        let mapper = Mapper::load(path).expect("overwatch mapping should parse");
+
+        assert!(mapper
+            .mappings
+            .iter()
+            .any(|mapping| matches!(mapping, Mapping::Button(_))));
+        assert!(mapper
+            .mappings
+            .iter()
+            .any(|mapping| matches!(mapping, Mapping::Axis(_))));
+        assert!(mapper
+            .mappings
+            .iter()
+            .any(|mapping| matches!(mapping, Mapping::Mouse(_))));
+    }
+
+    #[test]
+    fn accepts_mapping_path_relative_to_working_directory() {
+        let mapper = Mapper::load("../mappings/overwatch.json")
+            .expect("mapping path relative to the working directory should load");
+        assert!(!mapper.mappings.is_empty());
+    }
+
+    #[test]
+    fn mouse_x_updates_configured_x_axis() {
+        let mut mapper = mapper_from_json();
+        let raw_input = RawInput::with_mouse([10, 0]);
+        let mut ds4 = DS4::new(&[0; 64]).unwrap();
+
+        mapper.map_controller(&raw_input, &mut ds4);
+
+        assert_eq!(ds4.axis_rx(), 156);
+        assert_eq!(ds4.axis_ry(), 128);
+    }
+
+    #[test]
+    fn mouse_y_uses_independent_y_multiplier() {
+        let mut mapper = mapper_from_json();
+        let raw_input = RawInput::with_mouse([0, 10]);
+        let mut ds4 = DS4::new(&[0; 64]).unwrap();
+
+        mapper.map_controller(&raw_input, &mut ds4);
+
+        assert_eq!(ds4.axis_rx(), 128);
+        assert_eq!(ds4.axis_ry(), 184);
+    }
+
+    fn mapper_from_json() -> Mapper {
+        let mappings = serde_json::from_str(
+            r#"[{"type":"Mouse","output_x":"rx","output_y":"ry","multiplier_x":1.0,"multiplier_y":2.0,"dead_zone_x":0,"dead_zone_y":0,"sensitivity":1.0,"exponent":1.0,"shape":"square"}]"#,
+        )
+        .expect("test mapping should parse");
+        Mapper { mappings }
     }
 }

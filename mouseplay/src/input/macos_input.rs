@@ -22,6 +22,11 @@ impl RawInput {
     }
 
     pub fn accumulate(&mut self) {}
+
+    #[cfg(test)]
+    pub fn with_mouse(mouse: [i32; 2]) -> Self {
+        Self { mouse }
+    }
 }
 
 #[allow(dead_code)]

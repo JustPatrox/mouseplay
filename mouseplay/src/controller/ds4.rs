@@ -47,7 +47,8 @@ const R3: u8 = 1 << 7;
 const SHARE: u8 = 1 << 4;
 const OPTIONS: u8 = 1 << 5;
 const PSBUTTON: u8 = 1 << 0;
-const TOUCHBUTTON: u8 = 1 << 2 - 1;
+// The touchpad click is bit 1 of the button byte.
+const TOUCHBUTTON: u8 = 1 << 1;
 
 pub struct DS4 {
     buffer: Vec<u8>,

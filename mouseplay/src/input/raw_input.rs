@@ -148,6 +148,17 @@ impl RawInput {
         self.mouse[1]
     }
 
+    #[cfg(test)]
+    pub fn with_mouse(mouse: [i32; 2]) -> Self {
+        Self {
+            capture: None,
+            mouse_lock: false,
+            keys: [false; 256],
+            mouse,
+            mouse_accumulator: [0; 2],
+        }
+    }
+
     pub fn parse(
         &mut self,
         h_wnd: HWND,
