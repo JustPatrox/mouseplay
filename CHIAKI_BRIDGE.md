@@ -21,7 +21,7 @@ repr(C) ChiakiControllerState
       ↓
 mouseplay/bridge/chiaki_bridge.c
       ↓
-libchiaki (enlace pendiente)
+libchiaki (sesión C real)
 ```
 
 El bridge incluye el header público fijado de Chiaki-ng. Rust solo ve `ChiakiRemotePlay`, `RemotePlayError` y `ControllerState`; los handles C son opacos.
@@ -29,13 +29,14 @@ El bridge incluye el header público fijado de Chiaki-ng. Rust solo ve `ChiakiRe
 ## Funciones C expuestas
 
 - `mouseplay_chiaki_context_new`
+- `mouseplay_chiaki_context_init_session`
 - `mouseplay_chiaki_context_start`
 - `mouseplay_chiaki_context_set_controller_state`
 - `mouseplay_chiaki_context_stop`
 - `mouseplay_chiaki_context_free`
 - funciones de comprobación de tamaño/alineación de `ChiakiControllerState`
 
-Con `libchiaki.dylib` construido, `context_new` ejecuta `chiaki_lib_init()` real y devuelve un contexto operativo. `start`, `send_controller_state` y `stop` devuelven `SessionNotInitialized` hasta que una subfase posterior cree `ChiakiSession` con sus datos de conexión. En targets sin core enlazable el bridge se mantiene no disponible para no fingir una sesión.
+Con `libchiaki.dylib` construido, `context_new` ejecuta `chiaki_lib_init()` real. `configure_session` entrega a `chiaki_session_init` un host y las credenciales opacas ya obtenidas por discovery/registro; no implementa ninguna de esas operaciones. Después `start`, `send_controller_state` y `stop` llaman a la sesión real de Chiaki. En targets sin core enlazable el bridge se mantiene no disponible.
 
 ## Conversión
 
@@ -62,6 +63,6 @@ El bridge se compila mediante `mouseplay/build.rs` y la dependencia `cc`; no dep
 
 Chiaki-ng/libchiaki se mantiene bajo AGPL-3.0-only con permiso adicional para enlazar con OpenSSL. Deben conservarse `COPYING`, los avisos de terceros y el código fuente correspondiente al distribuir una combinación cubierta. Mouseplay conserva su licencia propia; la integración no la cambia.
 
-## No implementado todavía
+## Límite actual
 
-El enlace con `libchiaki` ya es real y `chiaki_lib_init()` se ejecuta en el test de integración del bridge. No existe todavía sesión configurada: discovery, pairing, registro, credenciales, autenticación completa, conexión PS5, keepalive operativo, vídeo, audio ni UI siguen pendientes.
+El enlace con `libchiaki` y la creación de `ChiakiSession` son reales. Mouseplay aún no ejecuta discovery, pairing ni registro: el caller debe proporcionar host, `regist_key` y `morning` producidos por Chiaki. La conexión PS5, autenticación, cifrado y keepalive permanecen dentro de libchiaki; no se duplican aquí. No se añadieron vídeo, audio ni UI.

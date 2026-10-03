@@ -1,6 +1,6 @@
 # Plan de integración de Chiaki-ng con Mouseplay
 
-**Estado:** plan actualizado tras integrar el core C externo. Chiaki-ng permanece como submódulo fijado; `libchiaki.dylib` se construye fuera del crate y se enlaza mediante `mouseplay/build.rs`. Discovery, pairing, registro y sesión PS5 siguen fuera de esta fase.
+**Estado:** core C externo y camino de sesión integrado. Chiaki-ng permanece como submódulo fijado; `libchiaki.dylib` se construye fuera del crate y se enlaza mediante `mouseplay/build.rs`. Mouseplay no implementa discovery, pairing ni registro: recibe los datos de conexión producidos por Chiaki y los entrega a `chiaki_session_init`.
 
 **Referencia investigada:** `streetpea/chiaki-ng`, rama `main`, especialmente `lib/include/chiaki/`, `lib/src/`, `lib/CMakeLists.txt` y `CMakeLists.txt`. La API y las estructuras descritas abajo deben fijarse a un commit/tag concreto antes de implementar, porque `main` puede cambiar.
 
@@ -126,7 +126,7 @@ El bridge debe mantener viva la sesión y responder únicamente a callbacks púb
 
 `controller.h` define `ChiakiControllerState` y el bitmask de botones. `feedbacksender.h` mantiene el estado anterior, numeración de secuencia, historial y cola de paquetes. `chiaki_session_set_controller_state()` copia el snapshot a la sesión y lo entrega al feedback sender cuando está activo. Ese componente es el que serializa y envía los estados al PS5 por el transporte de Chiaki.
 
-## 4. API exacta que deberíamos utilizar
+## 4. API exacta utilizada por el bridge
 
 ### Discovery y registration
 
@@ -168,7 +168,7 @@ void chiaki_controller_state_set_touch_pos(
     ChiakiControllerState *, uint8_t id, uint16_t x, uint16_t y);
 ```
 
-Para el primer adaptador, `set_idle()` y escritura directa de campos públicos son suficientes; la API de touch solo debe usarse cuando Mouseplay incorpore coordenadas y gestos de touchpad.
+El bridge actual usa `chiaki_lib_init`, `chiaki_session_init`, `chiaki_session_start`, `chiaki_session_set_controller_state`, `chiaki_session_stop`, `chiaki_session_join` y `chiaki_session_fini`. Recibe host, `regist_key` y `morning` ya obtenidos por Chiaki; no implementa discovery ni registro. `set_idle()` y escritura directa de campos públicos son suficientes para el estado actual; la API de touch solo debe usarse cuando Mouseplay incorpore coordenadas y gestos de touchpad.
 
 ## 5. ControllerState → Chiaki mapping
 

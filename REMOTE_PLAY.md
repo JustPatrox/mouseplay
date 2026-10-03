@@ -41,7 +41,9 @@ Sesión Remote Play de chiaki-ng
 PS4/PS5
 ```
 
-Esa integración requiere escoger una estrategia de dependencia concreta —biblioteca C de chiaki-ng, submódulo/build reproducible o proceso externo— y disponer de una sesión configurada con consola registrada. Ninguna de esas dependencias existe actualmente en este workspace.
+La dependencia concreta es el submódulo C de chiaki-ng fijado en `a9a2805884cfa83865fdfcc09ca3ddfcd628aa42`, construido como `libchiaki.dylib`. Mouseplay recibe una configuración de conexión ya registrada (host, `regist_key` y `morning`) y la pasa a `chiaki_session_init`; no implementa discovery, pairing ni registro.
+
+Después de configurar la sesión, `ChiakiRemotePlay::start()` llama a `chiaki_session_start()` y `send_controller_state()` llama a `chiaki_session_set_controller_state()`. El feedback sender, la autenticación, el cifrado, la red y el keepalive permanecen en libchiaki.
 
 ## Estado
 

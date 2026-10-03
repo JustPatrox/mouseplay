@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -18,6 +19,12 @@ enum {
 };
 
 MouseplayChiakiContext *mouseplay_chiaki_context_new(void);
+int mouseplay_chiaki_context_init_session(
+    MouseplayChiakiContext *context,
+    const char *host,
+    bool ps5,
+    const uint8_t *regist_key,
+    const uint8_t *morning);
 int mouseplay_chiaki_context_start(MouseplayChiakiContext *context);
 int mouseplay_chiaki_context_set_controller_state(
     MouseplayChiakiContext *context, const void *chiaki_controller_state);

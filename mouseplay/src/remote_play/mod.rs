@@ -5,6 +5,8 @@ pub use crate::controller::state::ControllerState;
 const SUCCESS: i32 = 0;
 const NOT_LINKED: i32 = 1;
 
+const SESSION_AUTH_SIZE: usize = 16;
+
 const CROSS: u32 = 1 << 0;
 const CIRCLE: u32 = 1 << 1;
 const SQUARE: u32 = 1 << 2;
@@ -45,6 +47,14 @@ pub struct ChiakiRemotePlay {
     context: *mut ffi::ChiakiBridgeContext,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChiakiConnectionConfig {
+    pub host: String,
+    pub ps5: bool,
+    pub regist_key: [u8; SESSION_AUTH_SIZE],
+    pub morning: [u8; SESSION_AUTH_SIZE],
+}
+
 impl ChiakiRemotePlay {
     pub fn new() -> Result<Self, RemotePlayError> {
         let context = unsafe { ffi::mouseplay_chiaki_context_new() };
@@ -52,6 +62,25 @@ impl ChiakiRemotePlay {
             return Err(RemotePlayError::BridgeUnavailable);
         }
         Ok(Self { context })
+    }
+
+    /// Initializes a Chiaki session from data obtained by Chiaki discovery/registration.
+    /// Mouseplay deliberately does not discover, pair, or register consoles itself.
+    pub fn configure_session(
+        &mut self,
+        config: &ChiakiConnectionConfig,
+    ) -> Result<(), RemotePlayError> {
+        let host = std::ffi::CString::new(config.host.as_str())
+            .map_err(|_| RemotePlayError::InvalidState)?;
+        self.call(unsafe {
+            ffi::mouseplay_chiaki_context_init_session(
+                self.context,
+                host.as_ptr(),
+                config.ps5,
+                config.regist_key.as_ptr(),
+                config.morning.as_ptr(),
+            )
+        })
     }
 
     pub fn start(&mut self) -> Result<(), RemotePlayError> {
@@ -267,5 +296,24 @@ mod tests {
             remote_play.stop(),
             Err(RemotePlayError::SessionNotInitialized)
         );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn configured_session_uses_chiaki_session_state_without_connecting() {
+        let mut remote_play = ChiakiRemotePlay::new().expect("linked libchiaki must initialize");
+        let config = ChiakiConnectionConfig {
+            host: "127.0.0.1".to_owned(),
+            ps5: true,
+            regist_key: [0x11; SESSION_AUTH_SIZE],
+            morning: [0x22; SESSION_AUTH_SIZE],
+        };
+
+        remote_play
+            .configure_session(&config)
+            .expect("Chiaki should initialize a session from registered connection data");
+        remote_play
+            .send_controller_state(&ControllerState::default())
+            .expect("controller state should be accepted by the initialized Chiaki session");
     }
 }

@@ -41,6 +41,13 @@ pub(crate) struct ChiakiBridgeContext {
 
 extern "C" {
     pub(crate) fn mouseplay_chiaki_context_new() -> *mut ChiakiBridgeContext;
+    pub(crate) fn mouseplay_chiaki_context_init_session(
+        context: *mut ChiakiBridgeContext,
+        host: *const std::os::raw::c_char,
+        ps5: bool,
+        regist_key: *const u8,
+        morning: *const u8,
+    ) -> c_int;
     pub(crate) fn mouseplay_chiaki_context_start(context: *mut ChiakiBridgeContext) -> c_int;
     pub(crate) fn mouseplay_chiaki_context_set_controller_state(
         context: *mut ChiakiBridgeContext,
