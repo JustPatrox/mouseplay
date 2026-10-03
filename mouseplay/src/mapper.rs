@@ -11,7 +11,7 @@ use winapi::{
     um::{libloaderapi::GetModuleFileNameA, winnt::IMAGE_DOS_HEADER},
 };
 
-use crate::{controller::ds4::DS4, input::raw_input::RawInput};
+use crate::{controller::state::ControllerState, input::raw_input::RawInput};
 
 #[cfg(windows)]
 extern "C" {
@@ -85,10 +85,10 @@ pub struct ButtonMapping {
 }
 
 impl ButtonMapping {
-    fn map_controller(&mut self, raw_input: &RawInput, ds4: &mut DS4) {
+    fn map_controller(&mut self, raw_input: &RawInput, state: &mut ControllerState) {
         let down = raw_input.key(&self.input);
         if down {
-            ds4.set_btn(&self.output, down);
+            state.set_button(&self.output, down);
         }
     }
 }
@@ -101,12 +101,12 @@ pub struct AxisMapping {
 }
 
 impl AxisMapping {
-    fn map_controller(&mut self, raw_input: &RawInput, ds4: &mut DS4) {
+    fn map_controller(&mut self, raw_input: &RawInput, state: &mut ControllerState) {
         let down = raw_input.key(&self.input);
         if down {
             let value = (0.5f32 + (self.value.max(-1f32).min(1f32) / 2f32)) * 255f32;
             //trace!("axis={}, value={}", self.output, value);
-            ds4.set_axis(&self.output, value as u8);
+            state.set_axis(&self.output, value as u8);
         }
     }
 }
@@ -136,7 +136,7 @@ pub struct MouseMapping {
 }
 
 impl MouseMapping {
-    fn map_controller(&mut self, raw_input: &RawInput, ds4: &mut DS4) {
+    fn map_controller(&mut self, raw_input: &RawInput, state: &mut ControllerState) {
         // this is roughly a copy of the implementation of gimx
         let mut mouse = [
             raw_input.mouse_x() as f64 * self.sensitivity,
@@ -199,14 +199,14 @@ impl MouseMapping {
         ];
 
         self.remainder[0] = Self::update_controller_axis(
-            ds4,
+            state,
             &self.output_x,
             &mut axis[0],
             &mut self.axis_hist[0],
             min_axis,
         );
         self.remainder[1] = Self::update_controller_axis(
-            ds4,
+            state,
             &self.output_y,
             &mut axis[1],
             &mut self.axis_hist[1],
@@ -233,7 +233,7 @@ impl MouseMapping {
     }
 
     fn update_controller_axis(
-        ds4: &mut DS4,
+        state: &mut ControllerState,
         output: &str,
         axis: &mut i32,
         axis_hist: &mut Vec<i32>,
@@ -252,7 +252,7 @@ impl MouseMapping {
 
         // update controller state
         let _axis = *axis;
-        ds4.set_axis(output, _axis as u8);
+        state.set_axis(output, _axis as u8);
 
         axis_hist.push(_axis);
         if axis_hist.len() > 256 {
@@ -356,17 +356,17 @@ impl Mapper {
         Ok(Self { mappings })
     }
 
-    pub fn map_controller(&mut self, raw_input: &RawInput, ds4: &mut DS4) {
+    pub fn map_controller(&mut self, raw_input: &RawInput, state: &mut ControllerState) {
         for mapping in self.mappings.iter_mut() {
             match mapping {
                 Mapping::Button(mapping) => {
-                    mapping.map_controller(raw_input, ds4);
+                    mapping.map_controller(raw_input, state);
                 }
                 Mapping::Axis(mapping) => {
-                    mapping.map_controller(raw_input, ds4);
+                    mapping.map_controller(raw_input, state);
                 }
                 Mapping::Mouse(mapping) => {
-                    mapping.map_controller(raw_input, ds4);
+                    mapping.map_controller(raw_input, state);
                 }
             }
         }
@@ -376,7 +376,7 @@ impl Mapper {
 #[cfg(test)]
 mod tests {
     use super::{Mapper, Mapping};
-    use crate::{controller::ds4::DS4, input::raw_input::RawInput};
+    use crate::{controller::state::ControllerState, input::raw_input::RawInput};
 
     #[test]
     fn loads_existing_mapping_json() {
@@ -409,24 +409,24 @@ mod tests {
     fn mouse_x_updates_configured_x_axis() {
         let mut mapper = mapper_from_json();
         let raw_input = RawInput::with_mouse([10, 0]);
-        let mut ds4 = DS4::new(&[0; 64]).unwrap();
+        let mut state = ControllerState::default();
 
-        mapper.map_controller(&raw_input, &mut ds4);
+        mapper.map_controller(&raw_input, &mut state);
 
-        assert_eq!(ds4.axis_rx(), 156);
-        assert_eq!(ds4.axis_ry(), 128);
+        assert_eq!(state.right_stick.x, 156);
+        assert_eq!(state.right_stick.y, 128);
     }
 
     #[test]
     fn mouse_y_uses_independent_y_multiplier() {
         let mut mapper = mapper_from_json();
         let raw_input = RawInput::with_mouse([0, 10]);
-        let mut ds4 = DS4::new(&[0; 64]).unwrap();
+        let mut state = ControllerState::default();
 
-        mapper.map_controller(&raw_input, &mut ds4);
+        mapper.map_controller(&raw_input, &mut state);
 
-        assert_eq!(ds4.axis_rx(), 128);
-        assert_eq!(ds4.axis_ry(), 184);
+        assert_eq!(state.right_stick.x, 128);
+        assert_eq!(state.right_stick.y, 184);
     }
 
     fn mapper_from_json() -> Mapper {

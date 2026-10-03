@@ -1,3 +1,5 @@
+use super::state::ControllerState;
+
 macro_rules! input_axis {
     ($name:ident, $byte:expr) => {
         paste::item! {
@@ -71,6 +73,53 @@ impl DS4 {
         self.buffer.clone()
     }
 
+    pub fn to_controller_state(&self) -> ControllerState {
+        let mut state = ControllerState::default();
+        state.set_axis("lx", self.axis_lx());
+        state.set_axis("ly", self.axis_ly());
+        state.set_axis("rx", self.axis_rx());
+        state.set_axis("ry", self.axis_ry());
+        state.set_axis("l2", self.axis_l2());
+        state.set_axis("r2", self.axis_r2());
+
+        for button in [
+            "triangle", "circle", "cross", "square", "l1", "r1", "l2", "r2", "l3", "r3", "share",
+            "options", "ps", "touch",
+        ] {
+            state.set_button(button, self.button_pressed(button));
+        }
+
+        state
+    }
+
+    pub fn apply_controller_state(&mut self, state: &ControllerState) {
+        self.set_axis_lx(state.left_stick.x);
+        self.set_axis_ly(state.left_stick.y);
+        self.set_axis_rx(state.right_stick.x);
+        self.set_axis_ry(state.right_stick.y);
+        self.set_axis_l2(state.l2);
+        self.set_axis_r2(state.r2);
+
+        for (button, down) in [
+            ("triangle", state.buttons.triangle),
+            ("circle", state.buttons.circle),
+            ("cross", state.buttons.cross),
+            ("square", state.buttons.square),
+            ("l1", state.buttons.l1),
+            ("r1", state.buttons.r1),
+            ("l2", state.buttons.l2),
+            ("r2", state.buttons.r2),
+            ("l3", state.buttons.l3),
+            ("r3", state.buttons.r3),
+            ("share", state.buttons.share),
+            ("options", state.buttons.options),
+            ("ps", state.buttons.ps),
+            ("touch", state.buttons.touch),
+        ] {
+            self.set_btn(button, down);
+        }
+    }
+
     input_axis!(lx, 1);
     input_axis!(ly, 2);
     input_axis!(rx, 3);
@@ -124,6 +173,26 @@ impl DS4 {
         }
     }
 
+    fn button_pressed(&self, button: &str) -> bool {
+        match button {
+            "triangle" => self.btn_triangle(),
+            "circle" => self.btn_circle(),
+            "cross" => self.btn_cross(),
+            "square" => self.btn_square(),
+            "l1" => self.btn_l1(),
+            "r1" => self.btn_r1(),
+            "l2" => self.btn_l2(),
+            "r2" => self.btn_r2(),
+            "l3" => self.btn_l3(),
+            "r3" => self.btn_r3(),
+            "share" => self.btn_share(),
+            "options" => self.btn_options(),
+            "ps" => self.btn_ps(),
+            "touch" => self.btn_touch(),
+            _ => false,
+        }
+    }
+
     pub fn set_axis(&mut self, axis: &str, value: u8) {
         match axis {
             "lx" => self.set_axis_lx(value),
@@ -148,5 +217,33 @@ impl DS4 {
 
     pub fn is_charging(&self) -> bool {
         (self.buffer[30] & 0x10) != 0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DS4;
+    use crate::controller::state::ControllerState;
+
+    #[test]
+    fn controller_state_round_trips_through_supported_ds4_fields() {
+        let mut state = ControllerState::default();
+        state.set_axis("lx", 10);
+        state.set_axis("ly", 20);
+        state.set_axis("rx", 230);
+        state.set_axis("ry", 240);
+        state.set_axis("l2", 80);
+        state.set_axis("r2", 200);
+        for button in [
+            "triangle", "circle", "cross", "square", "l1", "r1", "l2", "r2", "l3", "r3", "share",
+            "options", "ps", "touch",
+        ] {
+            state.set_button(button, true);
+        }
+
+        let mut ds4 = DS4::new(&[0; 64]).unwrap();
+        ds4.apply_controller_state(&state);
+
+        assert_eq!(ds4.to_controller_state(), state);
     }
 }

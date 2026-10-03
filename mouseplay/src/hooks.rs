@@ -218,7 +218,9 @@ unsafe extern "stdcall" fn hook_read_file(
                     if let Ok(mut mapper) = crate::mapper::MAPPER.write() {
                         if let Some(mapper) = mapper.as_mut() {
                             raw_input.accumulate();
-                            mapper.map_controller(&raw_input, &mut ds4);
+                            let mut state = ds4.to_controller_state();
+                            mapper.map_controller(&raw_input, &mut state);
+                            ds4.apply_controller_state(&state);
                             buffer_part.copy_from_slice(ds4.to_raw().as_slice());
                         }
                     }
