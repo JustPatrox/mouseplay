@@ -1,0 +1,6 @@
+--- /tmp/mouseplay-phase1-baseline	2026-10-03 10:18:49
++++ artifacts/phase1/MODIFIED_FILE	2026-10-03 10:18:49
+@@ -1,2 +1,2 @@
+ branch=macos-platform-isolation
+-state=baseline
++state=modified

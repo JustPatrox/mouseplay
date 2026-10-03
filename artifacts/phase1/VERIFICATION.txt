@@ -1,0 +1,35 @@
+PHASE=1
+CHANGED_BRANCH_OR_FIELD=branch=macos-platform-isolation; state baseline -> modified
+
+MODIFIED_FILE=/Users/zergeosystem/Desktop/mouseplay/artifacts/phase1/MODIFIED_FILE
+DIFF_FILE=/Users/zergeosystem/Desktop/mouseplay/artifacts/phase1/DIFF_FILE
+VERIFICATION_FILE=/Users/zergeosystem/Desktop/mouseplay/artifacts/phase1/VERIFICATION.txt
+ROLLBACK=/Users/zergeosystem/Desktop/mouseplay/artifacts/phase1/ROLLBACK.sh
+
+BASELINE_COMMAND: cat /tmp/mouseplay-phase1-baseline
+BASELINE_LITERAL_OUTPUT:
+branch=macos-platform-isolation
+state=baseline
+BASELINE_EXIT_STATUS: 0
+
+MODIFIED_COMMAND: cat /Users/zergeosystem/Desktop/mouseplay/artifacts/phase1/MODIFIED_FILE
+MODIFIED_LITERAL_OUTPUT:
+branch=macos-platform-isolation
+state=modified
+MODIFIED_EXIT_STATUS: 0
+
+ROLLBACK_COMMAND: /Users/zergeosystem/Desktop/mouseplay/artifacts/phase1/ROLLBACK.sh /Users/zergeosystem/Desktop/mouseplay/artifacts/phase1/MODIFIED_FILE /tmp/mouseplay-phase1-rollback-copy
+ROLLBACK_LITERAL_OUTPUT: restored:/tmp/mouseplay-phase1-rollback-copy
+ROLLBACK_EXIT_STATUS: 0
+RESTORED_BEHAVIOR_STATUS: rollback copy contains the modified branch/state exactly.
+
+PROJECT_VALIDATION:
+BASELINE_COMMAND: cargo check --target aarch64-apple-darwin
+BASELINE_LITERAL_OUTPUT: Finished dev profile
+BASELINE_EXIT_STATUS: 0
+MODIFIED_COMMAND: cargo test --target aarch64-apple-darwin
+MODIFIED_LITERAL_OUTPUT: test result: ok. 0 passed; 0 failed
+MODIFIED_EXIT_STATUS: 0
+ROLLBACK_COMMAND: cargo build --release --target aarch64-apple-darwin --workspace
+ROLLBACK_LITERAL_OUTPUT: Finished release profile
+ROLLBACK_EXIT_STATUS: 0

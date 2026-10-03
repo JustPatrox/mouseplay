@@ -1,9 +1,13 @@
 mod console;
 mod controller;
-mod hooks;
 mod input;
 mod mapper;
+mod platform;
 
+#[cfg(windows)]
+mod hooks;
+
+#[cfg(windows)]
 use winapi::um::winnt::{DLL_PROCESS_ATTACH, DLL_PROCESS_DETACH};
 
 // --- ESSA É A FUNÇÃO QUE O SEU LOADER PROCURA ---
@@ -13,7 +17,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     console::init();
 
     // 2. Configura os ganchos (Hooks) do mouse
-    hooks::setup();
+    platform::setup();
 
     // 3. Tenta carregar o arquivo de configuração
     // Usamos '?' para retornar o erro se o arquivo não existir
@@ -30,6 +34,7 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 // --- MANTEMOS O DLLMAIN PARA CASO QUEIRA USAR COMO DLL ---
+#[cfg(windows)]
 #[no_mangle]
 extern "system" fn DllMain(_hinst: *const u8, reason: u32, _reserved: *const u8) -> u32 {
     match reason {
@@ -37,7 +42,7 @@ extern "system" fn DllMain(_hinst: *const u8, reason: u32, _reserved: *const u8)
             std::thread::spawn(|| {
                 // Lógica separada para quando for injetado (sem loop infinito na thread principal)
                 console::init();
-                hooks::setup();
+                platform::setup();
                 if let Err(e) = mapper::load("mappings.json") {
                     eprintln!("Erro no mapeamento: {}", e);
                 }

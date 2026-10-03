@@ -15,9 +15,8 @@ simple_logger = "1.16"
 lazy_static = "1.4"
 paste = "1.0"
 libc = "0.2"
-itoa = "1.0"
 
-[dependencies.winapi]
+[target.'cfg(windows)'.dependencies.winapi]
 version = "0.3"
 features = [
     "winuser",
@@ -33,3 +32,7 @@ features = [
     "windowsx",     # ADICIONADO: Resolve erro do GET_Y_LPARAM
     "std"
 ]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.9"
+core-graphics = "0.23"

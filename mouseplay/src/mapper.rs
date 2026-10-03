@@ -1,4 +1,3 @@
-use std::ffi::CStr;
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 
@@ -6,6 +5,7 @@ use log::info;
 
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
+#[cfg(windows)]
 use winapi::{
     shared::minwindef::MAX_PATH,
     um::{libloaderapi::GetModuleFileNameA, winnt::IMAGE_DOS_HEADER},
@@ -13,6 +13,7 @@ use winapi::{
 
 use crate::{controller::ds4::DS4, input::raw_input::RawInput};
 
+#[cfg(windows)]
 extern "C" {
     pub static __ImageBase: u8;
 }
@@ -30,23 +31,36 @@ pub fn load(file_name: &str) -> Result<(), &'static str> {
 }
 
 fn get_library_dir() -> Result<PathBuf, &'static str> {
-    let mut buffer = vec![0u8; MAX_PATH];
-    unsafe {
-        GetModuleFileNameA(
-            &__ImageBase as *const _ as _,
-            buffer.as_mut_ptr() as _,
-            MAX_PATH as u32,
-        )
-    };
-    if let Some((n, _)) = buffer.iter().enumerate().find(|(_, c)| **c == 0_u8) {
-        buffer.truncate(n);
+    #[cfg(windows)]
+    {
+        let mut buffer = vec![0u8; MAX_PATH];
+        unsafe {
+            GetModuleFileNameA(
+                &__ImageBase as *const _ as _,
+                buffer.as_mut_ptr() as _,
+                MAX_PATH as u32,
+            )
+        };
+        if let Some((n, _)) = buffer.iter().enumerate().find(|(_, c)| **c == 0_u8) {
+            buffer.truncate(n);
+        }
+        let file_name = PathBuf::from(String::from_utf8_lossy(&buffer).to_string());
+        let file_path = file_name
+            .parent()
+            .ok_or("unable to get library parent directory")?;
+        info!("library dir: {:?}", file_path);
+        Ok(file_path.to_path_buf())
     }
-    let file_name = PathBuf::from(String::from_utf8_lossy(&buffer).to_string());
-    let file_path = file_name
-        .parent()
-        .ok_or("unable to get library parent directory")?;
-    info!("library dir: {:?}", file_path);
-    Ok(file_path.to_path_buf())
+
+    #[cfg(not(windows))]
+    {
+        let executable = std::env::current_exe().map_err(|_| "unable to get executable path")?;
+        let directory = executable
+            .parent()
+            .ok_or("unable to get executable parent directory")?;
+        info!("executable dir: {:?}", directory);
+        Ok(directory.to_path_buf())
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -1,14 +1,22 @@
+#[cfg(windows)]
 use std::ffi::CString;
+#[cfg(windows)]
 use std::fs::OpenOptions;
+#[cfg(windows)]
 use std::os::windows::io::AsRawHandle;
 
 use log::{info, Level};
 
+#[cfg(windows)]
 use winapi::um::consoleapi::AllocConsole;
+#[cfg(windows)]
 use winapi::um::processenv::SetStdHandle;
+#[cfg(windows)]
 use winapi::um::winbase::{STD_ERROR_HANDLE, STD_OUTPUT_HANDLE};
+#[cfg(windows)]
 use winapi::um::wincon::SetConsoleTitleA;
 
+#[cfg(windows)]
 pub fn init() {
     if unsafe { AllocConsole() } != 0 {
         // console title
@@ -51,4 +59,12 @@ pub fn init() {
         println!("");
         info!("console initialized");
     }
+}
+
+#[cfg(not(windows))]
+pub fn init() {
+    let _ = simple_logger::SimpleLogger::new()
+        .with_level(Level::Debug.to_level_filter())
+        .init();
+    info!("console initialized");
 }
