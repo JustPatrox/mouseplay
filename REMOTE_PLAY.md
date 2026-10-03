@@ -48,3 +48,17 @@ Esa integración requiere escoger una estrategia de dependencia concreta —bibl
 Fase 5: investigación y límite de integración documentados; transporte Remote Play todavía no implementado.
 
 No se declara conexión PS5 funcional.
+
+## Fase 5A/5B — core externo y frontera FFI
+
+Se fijó Chiaki-ng como dependencia Git externa en el commit:
+
+`a9a2805884cfa83865fdfcc09ca3ddfcd628aa42`
+
+La referencia está en `third-party/chiaki-ng` como submódulo; Mouseplay no copia sus fuentes dentro de sus crates. El bridge C de `mouseplay/bridge/` incluye únicamente el header público `chiaki/controller.h` del submódulo. La compilación Cargo genera la biblioteca estática del bridge con `cc` y verifica el layout C/Rust de `ChiakiControllerState`.
+
+La API Rust expuesta es `mouseplay::remote_play::ChiakiRemotePlay` con `new`, `start`, `send_controller_state` y `stop`. La conversión cubre sticks, triggers, botones, click de touchpad y valores neutrales de motion/touch no representados por Mouseplay. La API C mantiene handles opacos y reserva las operaciones de contexto/sesión para la siguiente subfase, cuando exista un build enlazable de `chiaki-lib`.
+
+Estado actual: el bridge compila y la FFI valida la estructura pública real de Chiaki, pero el contexto devuelve `CoreNotLinked` porque la biblioteca `chiaki-lib` todavía no se construye ni se enlaza. No existe conexión PS5, discovery, pairing, registro, vídeo, audio ni autenticación implementada.
+
+Para reproducir el checkout se deben inicializar submódulos (`git clone --recurse-submodules` o `git submodule update --init --recursive`) y conservar el commit fijado. La licencia del submódulo sigue siendo AGPL-3.0-only con el permiso adicional de OpenSSL descrito en `CHIAKI_INTEGRATION_PLAN.md`.

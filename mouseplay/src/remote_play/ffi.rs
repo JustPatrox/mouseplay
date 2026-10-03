@@ -1,0 +1,53 @@
+#![allow(dead_code)]
+
+use std::os::raw::c_int;
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct ChiakiControllerTouch {
+    pub x: u16,
+    pub y: u16,
+    pub id: i8,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ChiakiControllerState {
+    pub buttons: u32,
+    pub l2_state: u8,
+    pub r2_state: u8,
+    pub left_x: i16,
+    pub left_y: i16,
+    pub right_x: i16,
+    pub right_y: i16,
+    pub touch_id_next: u8,
+    pub touches: [ChiakiControllerTouch; 2],
+    pub gyro_x: f32,
+    pub gyro_y: f32,
+    pub gyro_z: f32,
+    pub accel_x: f32,
+    pub accel_y: f32,
+    pub accel_z: f32,
+    pub orient_x: f32,
+    pub orient_y: f32,
+    pub orient_z: f32,
+    pub orient_w: f32,
+}
+
+#[repr(C)]
+pub(crate) struct ChiakiBridgeContext {
+    _private: [u8; 0],
+}
+
+extern "C" {
+    pub(crate) fn mouseplay_chiaki_context_new() -> *mut ChiakiBridgeContext;
+    pub(crate) fn mouseplay_chiaki_context_start(context: *mut ChiakiBridgeContext) -> c_int;
+    pub(crate) fn mouseplay_chiaki_context_set_controller_state(
+        context: *mut ChiakiBridgeContext,
+        state: *const ChiakiControllerState,
+    ) -> c_int;
+    pub(crate) fn mouseplay_chiaki_context_stop(context: *mut ChiakiBridgeContext) -> c_int;
+    pub(crate) fn mouseplay_chiaki_context_free(context: *mut ChiakiBridgeContext);
+    pub(crate) fn mouseplay_chiaki_controller_state_size() -> usize;
+    pub(crate) fn mouseplay_chiaki_controller_state_alignment() -> usize;
+}

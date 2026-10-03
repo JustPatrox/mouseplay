@@ -3,6 +3,7 @@ mod controller;
 mod input;
 mod mapper;
 mod platform;
+pub mod remote_play;
 
 #[cfg(windows)]
 mod hooks;
