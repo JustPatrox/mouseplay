@@ -403,7 +403,12 @@ extern "C" fn disconnect_action(this: &mut Object, _: Sel, _: id) {
 }
 
 extern "C" fn poll_action(this: &mut Object, _: Sel, _: id) {
-    unsafe {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
+        poll_action_inner(this);
+    }));
+}
+
+unsafe fn poll_action_inner(this: &mut Object) {
         let events: Vec<UiEvent> = gui_state(this).events.try_iter().collect();
         for event in events {
             match event {
@@ -429,7 +434,6 @@ extern "C" fn poll_action(this: &mut Object, _: Sel, _: id) {
         } else {
             set_text(controls, "Controles: INACTIVOS · F6 para capturar mouse");
         }
-    }
 }
 
 fn build_window(delegate: id) {

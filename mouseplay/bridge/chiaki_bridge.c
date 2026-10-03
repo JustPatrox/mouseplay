@@ -141,6 +141,11 @@ static void mouseplay_video_frame_available(ChiakiFfmpegDecoder *decoder, void *
         goto done;
     if (decoded.frame->format != AV_PIX_FMT_YUV420P && decoded.frame->format != AV_PIX_FMT_NV12)
         goto done;
+    if (!decoded.frame->data[0] || !decoded.frame->data[1]
+        || decoded.frame->linesize[0] <= 0 || decoded.frame->linesize[1] <= 0
+        || (decoded.frame->format == AV_PIX_FMT_YUV420P
+            && (!decoded.frame->data[2] || decoded.frame->linesize[2] <= 0)))
+        goto done;
 
     size_t size = (size_t)decoded.frame->width * (size_t)decoded.frame->height * 4;
     uint8_t *rgba = malloc(size);
