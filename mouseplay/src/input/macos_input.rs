@@ -140,6 +140,13 @@ pub fn update_controller_state() {
     mapper.map_controller(&raw_input, &mut state);
 }
 
+pub fn current_controller_state() -> ControllerState {
+    CONTROLLER_STATE
+        .read()
+        .map(|state| *state)
+        .unwrap_or_default()
+}
+
 fn run_event_tap() {
     let events = vec![
         CGEventType::KeyDown,

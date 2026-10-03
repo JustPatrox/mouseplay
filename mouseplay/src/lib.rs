@@ -35,6 +35,28 @@ pub fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
+pub fn initialize_input(mapping_path: &str) -> Result<(), &'static str> {
+    mapper::load(mapping_path)?;
+    platform::setup();
+    Ok(())
+}
+
+pub fn tick_input() {
+    platform::tick();
+}
+
+pub fn controller_state() -> controller::state::ControllerState {
+    #[cfg(target_os = "macos")]
+    {
+        input::raw_input::current_controller_state()
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        controller::state::ControllerState::default()
+    }
+}
+
 // --- MANTEMOS O DLLMAIN PARA CASO QUEIRA USAR COMO DLL ---
 #[cfg(windows)]
 #[no_mangle]

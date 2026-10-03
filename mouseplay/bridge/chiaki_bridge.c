@@ -16,9 +16,12 @@ typedef SSIZE_T ssize_t;
 #include <chiaki/regist.h>
 #include <chiaki/session.h>
 #include <arpa/inet.h>
+#include <errno.h>
 #include <netdb.h>
+#include <pthread.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 #endif
 
 #define MOUSEPLAY_CHIAKI_HOST_CAPACITY 256
@@ -26,6 +29,9 @@ typedef SSIZE_T ssize_t;
 #if defined(MOUSEPLAY_CHIAKI_LINKED)
 struct MouseplayDiscoveryCallback {
     MouseplayChiakiDiscoveryResult *result;
+    pthread_mutex_t mutex;
+    pthread_cond_t condition;
+    bool done;
 };
 
 static void mouseplay_chiaki_discovery_callback(ChiakiDiscoveryHost *host, void *user)
@@ -33,11 +39,15 @@ static void mouseplay_chiaki_discovery_callback(ChiakiDiscoveryHost *host, void 
     struct MouseplayDiscoveryCallback *callback = user;
     if (!host || !callback || !callback->result || !host->host_addr)
         return;
+    pthread_mutex_lock(&callback->mutex);
     strncpy(callback->result->host, host->host_addr, MOUSEPLAY_CHIAKI_HOST_CAPACITY - 1);
     callback->result->host[MOUSEPLAY_CHIAKI_HOST_CAPACITY - 1] = '\0';
     callback->result->ps5 = chiaki_discovery_host_is_ps5(host);
     callback->result->target = chiaki_discovery_host_system_version_target(host);
     callback->result->state = host->state;
+    callback->done = true;
+    pthread_cond_signal(&callback->condition);
+    pthread_mutex_unlock(&callback->mutex);
 }
 
 struct MouseplayRegistrationCallback {
@@ -142,6 +152,8 @@ int mouseplay_chiaki_discover(
 
     ChiakiDiscoveryThread thread;
     struct MouseplayDiscoveryCallback callback = { .result = result };
+    pthread_mutex_init(&callback.mutex, NULL);
+    pthread_cond_init(&callback.condition, NULL);
     error = chiaki_discovery_thread_start_oneshot(
         &thread, &discovery, mouseplay_chiaki_discovery_callback, &callback);
     if (error == CHIAKI_ERR_SUCCESS) {
@@ -154,17 +166,35 @@ int mouseplay_chiaki_discover(
         };
         error = chiaki_discovery_send(
             &discovery, &packet, (struct sockaddr *)&destination, destination_size);
-        if (error == CHIAKI_ERR_SUCCESS)
-            error = chiaki_thread_timedjoin(&thread.thread, NULL, timeout_ms);
-        else
-            chiaki_discovery_thread_stop(&thread);
-        if (error == CHIAKI_ERR_TIMEOUT) {
-            chiaki_discovery_thread_stop(&thread);
-        } else if (error == CHIAKI_ERR_SUCCESS) {
-            chiaki_stop_pipe_fini(&thread.stop_pipe);
-        } else {
-            chiaki_discovery_thread_stop(&thread);
+        if (error == CHIAKI_ERR_SUCCESS) {
+            struct timespec deadline;
+            clock_gettime(CLOCK_REALTIME, &deadline);
+            deadline.tv_sec += (time_t)(timeout_ms / 1000);
+            deadline.tv_nsec += (long)((timeout_ms % 1000) * 1000000);
+            if (deadline.tv_nsec >= 1000000000L) {
+                deadline.tv_sec++;
+                deadline.tv_nsec -= 1000000000L;
+            }
+            pthread_mutex_lock(&callback.mutex);
+            while (!callback.done && error == CHIAKI_ERR_SUCCESS) {
+                int wait_error = pthread_cond_timedwait(
+                    &callback.condition, &callback.mutex, &deadline);
+                if (wait_error == ETIMEDOUT)
+                    error = CHIAKI_ERR_TIMEOUT;
+                else if (wait_error != 0)
+                    error = CHIAKI_ERR_UNKNOWN;
+            }
+            pthread_mutex_unlock(&callback.mutex);
         }
+        if (error != CHIAKI_ERR_SUCCESS || callback.done)
+            chiaki_discovery_thread_stop(&thread);
+    }
+    if (error != CHIAKI_ERR_SUCCESS && error != CHIAKI_ERR_TIMEOUT) {
+        pthread_cond_destroy(&callback.condition);
+        pthread_mutex_destroy(&callback.mutex);
+    } else {
+        pthread_cond_destroy(&callback.condition);
+        pthread_mutex_destroy(&callback.mutex);
     }
     chiaki_discovery_fini(&discovery);
     if (error != CHIAKI_ERR_SUCCESS)

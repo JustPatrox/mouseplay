@@ -7,3 +7,10 @@ edition = "2018"
 [dependencies]
 # Esta linha conecta o loader à lógica real do mouse
 mouseplay = { path = "../mouseplay" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cocoa = "0.25"
+objc = "0.2"
+base64 = "0.22"
+log = "0.4"
+simple_logger = "1.16"

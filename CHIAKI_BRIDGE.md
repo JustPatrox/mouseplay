@@ -67,4 +67,4 @@ Chiaki-ng/libchiaki se mantiene bajo AGPL-3.0-only con permiso adicional para en
 
 ## Límite actual
 
-El enlace con `libchiaki`, discovery directo, registro y creación de `ChiakiSession` son reales. La API de registro recibe el PIN y el PSN Account-ID; todavía no hay UI completa ni persistencia de credenciales en Mouseplay. La conexión PS5, autenticación, cifrado y keepalive permanecen dentro de libchiaki; no se duplican aquí. No se añadieron vídeo, audio ni UI.
+El enlace con `libchiaki`, discovery directo, registro y creación de `ChiakiSession` son reales. La aplicación `loader` añade una interfaz AppKit mínima que solicita PIN y PSN Account-ID, y conserva las credenciales solo durante la ejecución. La conexión PS5, autenticación, cifrado y keepalive permanecen dentro de libchiaki; no se duplican aquí. No se añadieron vídeo, audio ni UI de streaming.

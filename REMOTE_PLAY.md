@@ -47,6 +47,8 @@ Después de configurar la sesión, `ChiakiRemotePlay::start()` llama a `chiaki_s
 
 La API Rust también expone `discover()` y `register_ps5()`. Son wrappers delgados: discovery devuelve el `host_addr`/target de `ChiakiDiscoveryHost`, y registro devuelve `ChiakiRegisteredHost.rp_regist_key` como `regist_key` y `ChiakiRegisteredHost.rp_key` como `morning`. El caller puede convertir esas credenciales con `into_connection_config()` y configurar la sesión sin un DualSense físico.
 
+El binario `loader` incluye una ventana nativa AppKit en macOS con botones para buscar, registrar, conectar y desconectar, además de estado y logs básicos. La UI no procesa eventos de juego: el worker mantiene Quartz → RawInput → Mapper → ControllerState y envía snapshots a Chiaki.
+
 ## Estado
 
 Fase 5: investigación y límite de integración documentados; transporte Remote Play todavía no implementado.

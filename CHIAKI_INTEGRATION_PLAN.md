@@ -1,6 +1,6 @@
 # Plan de integración de Chiaki-ng con Mouseplay
 
-**Estado:** core C externo y camino de sesión integrado. Chiaki-ng permanece como submódulo fijado; `libchiaki.dylib` se construye fuera del crate y se enlaza mediante `mouseplay/build.rs`. Mouseplay no implementa discovery, pairing ni registro: recibe los datos de conexión producidos por Chiaki y los entrega a `chiaki_session_init`.
+**Estado:** core C externo, camino de sesión e interfaz AppKit mínima integrados. Chiaki-ng permanece como submódulo fijado; `libchiaki.dylib` se construye fuera del crate y se enlaza mediante `mouseplay/build.rs`. Mouseplay usa las APIs de discovery/registro de Chiaki y entrega sus resultados a `chiaki_session_init`.
 
 **Referencia investigada:** `streetpea/chiaki-ng`, rama `main`, especialmente `lib/include/chiaki/`, `lib/src/`, `lib/CMakeLists.txt` y `CMakeLists.txt`. La API y las estructuras descritas abajo deben fijarse a un commit/tag concreto antes de implementar, porque `main` puede cambiar.
 
